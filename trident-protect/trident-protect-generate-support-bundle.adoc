@@ -1,0 +1,107 @@
+---
+sidebar: sidebar 
+permalink: trident-protect/trident-protect-generate-support-bundle.html 
+keywords: trident, protect, bundle, support, netapp, custom, resource, file 
+summary: 'Trident Protect 使管理员能够生成捆绑包，其中包括对 NetApp Support 有用的信息，包括有关所管理集群和应用程序的日志、指标和拓扑信息。如果您已连接到互联网，则可以使用自定义资源 (CR) 文件将支持捆绑包上传到 NetApp 支持站点 (NSS)。' 
+---
+= 生成 Trident Protect 支持包
+:hardbreaks:
+:allow-uri-read: 
+:nofooter: 
+:icons: font
+:linkattrs: 
+:imagesdir: ../media/
+
+
+[role="lead"]
+Trident Protect 使管理员能够生成捆绑包，其中包括对 NetApp Support 有用的信息，包括有关所管理集群和应用程序的日志、指标和拓扑信息。如果您已连接到互联网，则可以使用自定义资源 (CR) 文件将支持捆绑包上传到 NetApp 支持站点 (NSS)。
+
+[role="tabbed-block"]
+====
+.使用 CR 创建支持包
+--
+.步骤
+. 创建自定义资源 (CR) 文件并将其命名（例如， `trident-protect-support-bundle.yaml`）。
+. 配置以下属性：
++
+** *metadata.name*：（_Required_）此自定义资源的名称；为您的环境选择一个唯一且合理的名称。
+** *spec.triggerType*: (_Required_) 确定支持包是立即生成还是计划生成。计划包生成发生在 UTC 时间凌晨 12 点。可能的值：
++
+*** 已计划
+*** 手动
+
+
+** *spec.uploadEnabled*: (_Optional_) 控制是否应在生成支持捆绑包后将其上传到 NetApp 支持站点。如果未指定，则默认为 `false`。可能的值：
++
+*** true
+*** false（默认）
+
+
+** *spec.dataWindowStart*: (_Optional_) RFC 3339 格式的日期字符串，指定支持包中包含数据的窗口应开始的日期和时间。如果未指定，则默认为 24 小时前。您可以指定的最早窗口日期为 7 天前。
++
+示例 YAML：
+
++
+[source, yaml]
+----
+---
+apiVersion: protect.trident.netapp.io/v1
+kind: AutoSupportBundle
+metadata:
+  name: trident-protect-support-bundle
+spec:
+  triggerType: Manual
+  uploadEnabled: true
+  dataWindowStart: 2024-05-05T12:30:00Z
+----
+
+
+. 使用正确的值填充 `trident-protect-support-bundle.yaml`文件后，应用 CR：
++
+[source, console]
+----
+kubectl apply -f trident-protect-support-bundle.yaml -n trident-protect
+----
+
+
+--
+.使用 CLI 创建支持包
+--
+.步骤
+. 创建支持包，用环境中的信息替换括号中的值。 `trigger-type`确定是否立即创建捆绑包，或者创建时间是否由计划决定，并且可以是 `Manual`或 `Scheduled`。默认设置为 `Manual`。
++
+例如：
+
++
+[source, console]
+----
+tridentctl-protect create autosupportbundle <my-bundle-name> --trigger-type <trigger-type> -n trident-protect
+----
+
+
+--
+====
+
+
+[[monitor-and-retrieve-the-support-bundle]]
+== 监控和检索支持包
+
+使用任一方法创建支持包后，您可以监视其生成进度并将其检索到本地系统。
+
+.步骤
+. 等待  `status.generationState` 到达  `Completed` 状态。您可以使用以下命令监控生成进度：
++
+[source, console]
+----
+kubectl get autosupportbundle trident-protect-support-bundle -n trident-protect
+----
+. 将支持包检索到本地系统。从已完成的 AutoSupport 包中获取 copy 命令：
++
+[source, console]
+----
+kubectl describe autosupportbundle trident-protect-support-bundle -n trident-protect
+----
++
+从输出中查找 `kubectl cp`命令并运行它，将 destination 参数替换为首选的本地目录。
+
+

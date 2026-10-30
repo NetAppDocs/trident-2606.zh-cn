@@ -1,0 +1,535 @@
+---
+sidebar: sidebar 
+permalink: trident-use/worker-node-prep.html 
+keywords: storage class, manage storage class, storage classes, kubernetes storage classes, worker node, nfs, iscsi, kubernetes clusters, self-healing, healing, nvme, tcp 
+summary: Kubernetes 集群中的所有工作节点都需要能够挂载为 Pod 配置的卷。如果要为其中一个后端使用 ontap-nas、ontap-nas-economy、ontap-nas-flexgroup 驱动程序，则工作节点需要 NFS 工具。否则，它们需要 iSCSI 工具。 
+---
+= 准备 Trident Worker 节点
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+Kubernetes 集群中的所有工作节点都必须能够装载您为 Pod 配置的卷。要准备工作节点，必须根据您的驱动程序选择安装 NFS、iSCSI、NVMe/TCP 或 FC 工具。
+
+
+
+[[selecting-the-right-tools]]
+== 选择合适的工具
+
+如果要组合使用驱动程序，应为驱动程序安装所有必需的工具。最新版本的 Red Hat Enterprise Linux CoreOS (RHCOS) 默认安装了这些工具。
+
+.NFS 工具
+link:https://docs.netapp.com/us-en/trident/trident-use/worker-node-prep.html#nfs-volumes["安装 NFS 工具"] 如果您使用的是： `ontap-nas`、 `ontap-nas-economy`、 `ontap-nas-flexgroup` 或  `azure-netapp-files`。
+
+.iSCSI 工具
+link:https://docs.netapp.com/us-en/trident/trident-use/worker-node-prep.html#install-the-iscsi-tools["安装 iSCSI 工具"] 如果您使用的是： `ontap-san`， `ontap-san-economy`， `solidfire-san`。
+
+.NVMe 工具
+link:https://docs.netapp.com/us-en/trident/trident-use/worker-node-prep.html#nvmetcp-volumes["安装 NVMe 工具"] 如果您使用 `ontap-san`进行基于 TCP 的非易失性内存快速 (NVMe) over TCP (NVMe/TCP) 协议。
+
+
+NOTE: NetApp 建议 NVMe/TCP 使用 ONTAP 9.12 或更高版本。
+
+.基于 FC 的 SCSI 工具
+有关配置 FC 和 FC-NVMe SAN 主机的详细信息，请参见 link:https://docs.netapp.com/us-en/ontap/san-config/configure-fc-nvme-hosts-ha-pairs-reference.html["配置 FC  FC-NVMe SAN 主机的方法"]。
+
+link:https://docs.netapp.com/us-en/trident/trident-use/worker-node-prep.html#install-the-fc-tools["安装 FC 工具"] 如果您使用的是 `ontap-san` 与 sanType `fcp`（SCSI over FC）。
+
+*注意事项*：* OpenShift 和 KubeVirt 环境支持 SCSI over FC。* Docker 不支持 SCSI over FC。* iSCSI 自我修复不适用于 SCSI over FC。
+
+.SMB 工具
+link:https://docs.netapp.com/us-en/trident/trident-use/worker-node-prep.html#prepare-to-provision-smb-volumes["准备配置 SMB 卷"] 如果您使用： `ontap-nas` 来配置 SMB 卷。
+
+
+
+[[node-service-discovery]]
+== 节点服务发现
+
+Trident 尝试自动检测节点是否可以运行 iSCSI 或 NFS 服务。
+
+
+NOTE: 节点服务发现可识别发现的服务，但不保证服务配置正确。相反，缺少发现的服务并不能保证卷挂载会失败。
+
+.审阅事件
+Trident 创建事件以供节点标识发现的服务。要查看这些事件，请运行：
+
+[listing]
+----
+kubectl get event -A --field-selector involvedObject.name=<Kubernetes node name>
+----
+.查看已发现的服务
+Trident 标识在 Trident 节点 CR 上为每个节点启用的服务。要查看发现的服务，请运行：
+
+[listing]
+----
+tridentctl get node -o wide -n <Trident namespace>
+----
+
+
+[[nfs-volumes]]
+== NFS 卷
+
+使用操作系统的命令安装 NFS 工具。确保 NFS 服务在启动时启动。
+
+[role="tabbed-block"]
+====
+.RHEL 8+
+--
+[listing]
+----
+sudo yum install -y nfs-utils
+----
+--
+.Ubuntu
+--
+[listing]
+----
+sudo apt-get install -y nfs-common
+----
+--
+====
+
+WARNING: 安装 NFS 工具后重新启动工作节点，以防止将卷附加到容器时出现故障。
+
+
+
+[[iscsi-volumes]]
+== iSCSI 卷
+
+Trident 可以自动建立 iSCSI 会话、扫描 LUN、发现多路径设备、对其进行格式化并将其挂载到 pod。
+
+
+
+[[iscsi-self-healing-capabilities]]
+=== iSCSI 自我修复功能
+
+对于 ONTAP 系统，Trident 每五分钟运行一次 iSCSI 自我修复，以：
+
+. *识别* 所需的 iSCSI 会话状态和当前 iSCSI 会话状态。
+. *将*所需状态与当前状态进行*比较*，以确定所需的维修。Trident 决定维修优先级以及何时抢占维修。
+. *执行所需的维修*，将当前 iSCSI 会话状态恢复到所需的 iSCSI 会话状态。
+
+
+
+NOTE: 自我修复活动的日志位于相应 Daemonset Pod 的 `trident-main`容器中。要查看日志，必须在 Trident 安装期间将 `debug`设置为"true"。
+
+Trident iSCSI 自我修复功能可以帮助防止：
+
+* 网络连接问题后可能发生的陈旧或不正常的 iSCSI 会话。对于过时的会话，Trident 等待 7 分钟后退出，以重新建立与门户的连接。
++
+
+NOTE: 例如，如果 CHAP 机密在存储控制器上循环，并且网络失去连接，则旧的（_stale_）CHAP 机密可能会持续存在。自我修复可以识别这一点，并自动重新建立会话以应用更新的 CHAP 机密。
+
+* 缺少 iSCSI 会话
+* 缺少 LUN
+
+
+*升级 Trident 前需要考虑的要点*
+
+* 如果仅使用每个节点 igroup（在 23.04+ 中引入），iSCSI 自我修复将为 SCSI 总线中的所有设备启动 SCSI 重新扫描。
+* 如果仅使用后端范围的 igroup（自 23.04 起已弃用），iSCSI 自我修复将启动 SCSI 重新扫描 SCSI 总线中的确切 LUN ID。
+* 如果使用每节点 igroup 和后端作用域 igroup 的组合，iSCSI 自我修复将启动 SCSI 重新扫描 SCSI 总线中的确切 LUN ID。
+
+
+
+
+[[install-the-iscsi-tools]]
+=== 安装 iSCSI 工具
+
+使用操作系统命令安装 iSCSI 工具。
+
+.开始之前
+* Kubernetes 集群中的每个节点必须具有唯一的 IQN。*这是必要的先决条件*。
+* 如果使用 RHCOS 4.5 或更高版本，或其他与 RHEL 兼容的 Linux 发行版，以及 `solidfire-san`驱动程序和 Element OS 12.5 或更低版本，请确保 CHAP 身份验证算法在 `/etc/iscsi/iscsid.conf`中设置为 MD5。Element 12.7 提供了符合 FIPS 的安全 CHAP 算法 SHA1、SHA-256 和 SHA3-256。
++
+[listing]
+----
+sudo sed -i 's/^\(node.session.auth.chap_algs\).*/\1 = MD5/' /etc/iscsi/iscsid.conf
+----
+* 当使用运行 RHEL/Red Hat Enterprise Linux CoreOS (RHCOS) 的工作节点并配合 iSCSI PV 时，请在 StorageClass 中指定 `discard` mountOption，以执行内联空间回收。请参阅 https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html/managing_file_systems/discarding-unused-blocks_managing-file-systems["Red Hat 文档"^]。
+* 确保已升级到最新版本的  `multipath-tools`。
+
+
+[role="tabbed-block"]
+====
+.RHEL 8+
+--
+. 安装以下系统软件包：
++
+[listing]
+----
+sudo yum install -y lsscsi iscsi-initiator-utils device-mapper-multipath
+----
+. 检查 iscsi-initiator-utils 版本是否为 6.2.0.874-2.el7 或更高版本：
++
+[listing]
+----
+rpm -q iscsi-initiator-utils
+----
+. 将扫描设置为手动：
++
+[listing]
+----
+sudo sed -i 's/^\(node.session.scan\).*/\1 = manual/' /etc/iscsi/iscsid.conf
+----
+. 启用多路径：
++
+[listing]
+----
+sudo mpathconf --enable --with_multipathd y --find_multipaths n
+----
++
+
+NOTE: 请确保 `/etc/multipath.conf`包含 `find_multipaths no`下的 `defaults`。
+
+. 确保  `iscsid` 和  `multipathd` 正在运行：
++
+[listing]
+----
+sudo systemctl enable --now iscsid multipathd
+----
+. 启用并启动 `iscsi`：
++
+[listing]
+----
+sudo systemctl enable --now iscsi
+----
+
+
+--
+.Ubuntu
+--
+. 安装以下系统软件包：
++
+[listing]
+----
+sudo apt-get install -y open-iscsi lsscsi sg3-utils multipath-tools scsitools
+----
+. 检查 open-iscsi 版本是否为 2.0.874-5ubuntu2.10 或更高版本（用于 bionic）或 2.0.874-7.1ubuntu6.1 或更高版本（用于 focal）：
++
+[listing]
+----
+dpkg -l open-iscsi
+----
+. 将扫描设置为手动：
++
+[listing]
+----
+sudo sed -i 's/^\(node.session.scan\).*/\1 = manual/' /etc/iscsi/iscsid.conf
+----
+. 启用多路径：
++
+[listing]
+----
+sudo tee /etc/multipath.conf <<-EOF
+defaults {
+    user_friendly_names yes
+    find_multipaths no
+}
+EOF
+sudo systemctl enable --now multipath-tools.service
+sudo service multipath-tools restart
+----
++
+
+NOTE: 请确保 `/etc/multipath.conf`包含 `find_multipaths no`下的 `defaults`。
+
+. 确保 `open-iscsi`和 `multipath-tools`已启用并正在运行：
++
+[listing]
+----
+sudo systemctl status multipath-tools
+sudo systemctl enable --now open-iscsi.service
+sudo systemctl status open-iscsi
+----
++
+
+NOTE: 对于 Ubuntu 18.04，您必须在启动  `open-iscsi` 之前使用  `iscsiadm` 发现目标端口，才能启动 iSCSI 守护进程。或者，您也可以修改  `iscsi` 服务，使其自动启动  `iscsid`。
+
+
+
+--
+====
+
+
+[[configure-or-disable-iscsi-self-healing]]
+=== 配置或禁用 iSCSI 自我修复
+
+您可以配置以下 Trident iSCSI 自我修复设置，以修复过时的会话：
+
+* *iSCSI 自我修复间隔*：确定调用 iSCSI 自我修复的频率（默认值：5 分钟）。您可以通过设置较小的数字将其配置为更频繁地运行，也可以通过设置较大的数字将其配置为较少频繁地运行。
+
+
+[NOTE]
+====
+将 iSCSI 自我修复间隔设置为 0 可完全停止 iSCSI 自我修复。我们不建议禁用 iSCSI 自我修复；仅当 iSCSI 自我修复无法按预期工作或出于调试目的时，才应在某些情况下禁用 iSCSI 自我修复。
+
+====
+* *iSCSI Self-Healing Wait Time*：确定 iSCSI 自我修复在从不正常会话注销并尝试重新登录之前等待的持续时间（默认值：7 分钟）。您可以将其配置为更大的数值，以便识别为不正常的会话必须等待更长时间才能注销，然后尝试重新登录，或者配置为更小的数值以便更早注销并登录。
+
+
+[role="tabbed-block"]
+====
+.Helm
+--
+要配置或更改 iSCSI 自我修复设置，请在 helm 安装或 helm 更新期间传递 `iscsiSelfHealingInterval`和 `iscsiSelfHealingWaitTime`参数。
+
+以下示例将 iSCSI 自我修复间隔设置为 3 分钟，将自我修复等待时间设置为 6 分钟：
+
+[listing]
+----
+helm install trident trident-operator-100.2606.0.tgz --set iscsiSelfHealingInterval=3m0s --set iscsiSelfHealingWaitTime=6m0s -n trident
+----
+--
+.tridentctl
+--
+要配置或更改 iSCSI 自我修复设置，请在 tridentctl 安装或更新期间传递 `iscsi-self-healing-interval`和 `iscsi-self-healing-wait-time`参数。
+
+以下示例将 iSCSI 自我修复间隔设置为 3 分钟，将自我修复等待时间设置为 6 分钟：
+
+[listing]
+----
+tridentctl install --iscsi-self-healing-interval=3m0s --iscsi-self-healing-wait-time=6m0s -n trident
+----
+--
+====
+
+
+[[nvmetcp-volumes]]
+== NVMe/TCP 卷
+
+使用操作系统命令安装 NVMe 工具。
+
+[NOTE]
+====
+* NVMe 需要 RHEL 9 或更高版本。
+* 如果 Kubernetes 节点的内核版本太旧，或者 NVMe 包不适用于您的内核版本，则可能需要将节点的内核版本更新为使用 NVMe 包的内核版本。
+
+
+====
+[role="tabbed-block"]
+====
+.RHEL 9
+--
+[listing]
+----
+sudo yum install nvme-cli
+sudo yum install linux-modules-extra-$(uname -r)
+sudo modprobe nvme-tcp
+----
+--
+.Ubuntu
+--
+[listing]
+----
+sudo apt install nvme-cli
+sudo apt -y install linux-modules-extra-$(uname -r)
+sudo modprobe nvme-tcp
+----
+--
+====
+
+
+[[verify-installation]]
+=== 验证安装
+
+安装后，使用以下命令验证 Kubernetes 集群中的每个节点都有唯一的 NQN：
+
+[listing]
+----
+cat /etc/nvme/hostnqn
+----
+
+WARNING: Trident 会修改该  `ctrl_device_tmo` 值，以确保 NVMe 在出现故障时不会放弃该路径。请勿更改此设置。
+
+
+
+[[scsi-over-fc-volumes]]
+== 基于 FC 卷的 SCSI
+
+现在，您可以使用光纤通道 (FC) 协议与 Trident 来配置和管理 ONTAP 系统上的存储资源。
+
+
+
+[[prerequisites]]
+=== 前提条件
+
+配置 FC 所需的网络和节点设置。
+
+
+
+==== 网络设置
+
+. 获取目标接口的 WWPN。请参阅  https://docs.netapp.com/us-en/ontap-cli//network-interface-show.html["network interface show"^] 以了解更多信息。
+. 获取启动器（主机）上接口的 WWPN。
++
+请参见相应的主机操作系统实用程序。
+
+. 使用主机和目标的 WWPN 在 FC 交换机上配置分区。
++
+有关信息，请参见相应的交换机供应商文档。
+
++
+有关详细信息，请参阅以下 ONTAP 文档：
+
++
+** https://docs.netapp.com/us-en/ontap/san-config/fibre-channel-fcoe-zoning-concept.html["Fibre Channel 和 FCoE 分区概述"^]
+** https://docs.netapp.com/us-en/ontap/san-config/configure-fc-nvme-hosts-ha-pairs-reference.html["配置 FC  FC-NVMe SAN 主机的方法"^]
+
+
+
+
+
+
+[[install-the-fc-tools]]
+=== 安装 FC 工具
+
+使用操作系统的命令安装 FC 工具。
+
+* 当使用运行 RHEL/Red Hat Enterprise Linux CoreOS (RHCOS) 的工作节点并配合 FC PVs 时，请在  `discard` StorageClass 中指定 mountOption 以执行内联空间回收。请参阅 https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html/managing_file_systems/discarding-unused-blocks_managing-file-systems["Red Hat 文档"^]。
+
+
+[role="tabbed-block"]
+====
+.RHEL 8+
+--
+. 安装以下系统软件包：
++
+[listing]
+----
+sudo yum install -y lsscsi device-mapper-multipath
+----
+. 启用多路径：
++
+[listing]
+----
+sudo mpathconf --enable --with_multipathd y --find_multipaths n
+----
++
+
+NOTE: 请确保 `/etc/multipath.conf`包含 `find_multipaths no`下的 `defaults`。
+
+. 请确保  `multipathd` 正在运行：
++
+[listing]
+----
+sudo systemctl enable --now multipathd
+----
+
+
+--
+.Ubuntu
+--
+. 安装以下系统软件包：
++
+[listing]
+----
+sudo apt-get install -y lsscsi sg3-utils multipath-tools scsitools
+----
+. 启用多路径：
++
+[listing]
+----
+sudo tee /etc/multipath.conf <<-EOF
+defaults {
+    user_friendly_names yes
+    find_multipaths no
+}
+EOF
+sudo systemctl enable --now multipath-tools.service
+sudo service multipath-tools restart
+----
++
+
+NOTE: 请确保 `/etc/multipath.conf`包含 `find_multipaths no`下的 `defaults`。
+
+. 确保  `multipath-tools` 已启用并正在运行：
++
+[listing]
+----
+sudo systemctl status multipath-tools
+----
+
+
+--
+====
+
+
+[[prepare-to-provision-smb-volumes]]
+== 准备配置 SMB 卷
+
+您可以使用  `ontap-nas` 驱动程序配置 SMB 卷。
+
+
+WARNING: 必须在 SVM 上配置 NFS 和 SMB/CIFS 协议，才能为 ONTAP 本地群集创建 `ontap-nas-economy` SMB 卷。无法配置这些协议中的任何一个都将导致 SMB 卷创建失败。
+
+
+NOTE: `autoExportPolicy` 不支持 SMB 卷。
+
+.开始之前
+在设置 SMB 卷之前，必须具有下列内容。
+
+* 具有 Linux 控制器节点和至少一个运行 Windows Server 2022 的 Windows worker 节点的 Kubernetes 集群。Trident 仅支持将 SMB 卷挂载到在 Windows 节点上运行的 Pod。
+* 至少有一个包含您的 Active Directory 凭据的 Trident 密码。要生成密钥 `smbcreds`：
++
+[listing]
+----
+kubectl create secret generic smbcreds --from-literal username=user --from-literal password='password'
+----
+* 配置为 Windows 服务的 CSI 代理。要配置 `csi-proxy`，请参阅link:https://github.com/kubernetes-csi/csi-proxy["GitHub：CSI Proxy"^]或link:https://github.com/Azure/aks-engine/blob/master/docs/topics/csi-proxy-windows.md["GitHub：适用于 Windows 的 CSI 代理"^]了解在 Windows 上运行的 Kubernetes 节点。
+
+
+.步骤
+. 对于本地 ONTAP，您可以选择创建 SMB 共享，或者 Trident 可以为您创建一个共享。
++
+
+NOTE: Amazon FSx for ONTAP 需要 SMB 共享。
+
++
+您可以使用 link:https://learn.microsoft.com/en-us/troubleshoot/windows-server/system-management-components/what-is-microsoft-management-console["Microsoft 管理控制台"^] 共享文件夹管理单元或使用 ONTAP CLI 以两种方式之一创建 SMB 管理共享。要使用 ONTAP CLI 创建 SMB 共享：
+
++
+.. 如有必要，请为共享创建目录路径结构。
++
+此 `vserver cifs share create` 命令在共享创建期间检查 -path 选项中指定的路径。如果指定的路径不存在，则命令失败。
+
+.. 创建与指定 SVM 关联的 SMB 共享：
++
+[listing]
+----
+vserver cifs share create -vserver vserver_name -share-name share_name -path path [-share-properties share_properties,...] [other_attributes] [-comment text]
+----
+.. 验证是否已创建此共享：
++
+[listing]
+----
+vserver cifs share show -share-name share_name
+----
++
+
+NOTE: 有关详细信息，请参见 link:https://docs.netapp.com/us-en/ontap/smb-config/create-share-task.html["创建 SMB 共享"^]。
+
+
+
+. 创建后端时，必须配置以下内容以指定 SMB 卷。对于所有 FSx for ONTAP 后端配置选项，请参阅 link:trident-fsx-examples.html["FSx for ONTAP 配置选项和示例"]。
++
+[cols="1,2,1"]
+|===
+| 参数 | 说明 | 示例 
+
+
+| `smbShare` | 可以指定以下选项之一：使用 Microsoft Management Console 或 ONTAP CLI 创建的 SMB 共享的名称；允许 Trident 创建 SMB 共享的名称；或者可以将参数留空以阻止对卷的公共共享访问。此参数对于本地 ONTAP 是可选的。此参数是 Amazon FSx for ONTAP 后端所必需的，不能为空。 | `smb-share` 
+
+
+| `nasType` | *必须设置为 `smb`。*如果为 null，则默认为 `nfs`。 | `smb` 
+
+
+| `securityStyle` | 新卷的安全样式。*对于 SMB 卷，必须设置为 `ntfs`或 `mixed`。* | `ntfs` 或  `mixed` 用于 SMB 卷 
+
+
+| `unixPermissions` | 新卷的模式。*对于 SMB 卷，必须留空。* | "" 
+|===
+

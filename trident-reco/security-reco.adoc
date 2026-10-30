@@ -1,0 +1,76 @@
+---
+sidebar: sidebar 
+permalink: trident-reco/security-reco.html 
+keywords: security, chap, trident, namespace, nve, nae, encryption, volume encryption, aggregate encryption 
+summary: 请使用此处列出的建议，以确保您的 Trident 安装是安全的。 
+---
+= Trident 安全建议
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+请使用此处列出的建议，以确保 Trident 的安装安全。
+
+
+
+[[run-trident-in-its-own-namespace]]
+== 在自己的命名空间中运行 Trident
+
+必须防止应用程序、应用程序管理员、用户和管理应用程序访问 Trident 对象定义或 Pod，以确保可靠的存储并阻止潜在的恶意活动。
+
+要将其他应用程序和用户与 Trident 分离，请始终在自己的 Kubernetes 命名空间中安装 Trident(`trident`）。将 Trident 放在自己的命名空间中可确保只有 Kubernetes 管理人员才能访问 Trident Pod 和存储在命名空间 CRD 对象中的工件（如后端和 CHAP 机密（如果适用））。您应该确保只允许管理员访问 Trident 命名空间，从而访问 `tridentctl`应用程序。
+
+
+
+[[use-chap-authentication-with-ontap-san-backends]]
+== 对 ONTAP SAN 后端使用 CHAP 身份验证
+
+Trident 支持基于 CHAP 的 ONTAP SAN 工作负载身份验证（使用 `ontap-san`和 `ontap-san-economy`驱动程序）。NetApp 建议使用双向 CHAP 与 Trident 进行主机和存储后端之间的身份验证。
+
+对于使用 SAN 存储驱动程序的 ONTAP 后端，Trident 可以设置双向 CHAP 并通过 `tridentctl`管理 CHAP 用户名和机密。请参阅link:../trident-use/ontap-san-prep.html["准备使用 ONTAP SAN 驱动程序配置后端"^]以了解 Trident 如何在 ONTAP 后端上配置 CHAP。
+
+
+
+[[use-chap-authentication-with-netapp-hci-and-solidfire-backends]]
+== 将 CHAP 身份验证与 NetApp HCI 和 SolidFire 后端一起使用
+
+NetApp 建议部署双向 CHAP，以确保主机与 NetApp HCI 和 SolidFire 后端之间的身份验证。Trident 使用一个秘密对象，其中每个租户包含两个 CHAP 密码。安装 Trident 后，它会管理 CHAP 机密并将其存储在相应 PV 的 `tridentvolume` CR 对象中。创建 PV 时，Trident 使用 CHAP 机密来启动 iSCSI 会话，并通过 CHAP 与 NetApp HCI 和 SolidFire 系统进行通信。
+
+
+NOTE: 由 Trident 创建的卷不与任何卷访问组关联。
+
+
+
+[[use-trident-with-nve-and-nae]]
+== 将 Trident 与 NVE 和 NAE 配合使用
+
+NetApp ONTAP 提供静态数据加密，以便在磁盘被盗、退回或重新使用时保护敏感数据。有关详细信息，请参阅 link:https://docs.netapp.com/us-en/ontap/encryption-at-rest/configure-netapp-volume-encryption-concept.html["配置 NetApp 卷加密概述"^]。
+
+* 如果在后端启用了 NAE，则在 Trident 中配置的任何卷都将启用 NAE。
++
+** 您可以将 NVE 加密标志设置为 `""`以创建启用 NAE 的卷。
+
+
+* 如果未在后端启用 NAE，则在 Trident 中配置的任何卷都将启用 NVE，除非在后端配置中将 NVE 加密标志设置为 `false`（默认值）。
+
+
+[NOTE]
+====
+在启用 NAE 的后端上在 Trident 中创建的卷必须进行 NVE 或 NAE 加密。
+
+* 您可以在 Trident 后端配置中将 NVE 加密标志设置为 `true`，以覆盖 NAE 加密，并在每个卷的基础上使用特定的加密密钥。
+* 在启用 NAE 的后端上将 NVE 加密标志设置为 `false`可创建启用 NAE 的卷。无法通过将 NVE 加密标志设置为 `false`来禁用 NAE 加密。
+
+
+====
+* 您可以通过显式设置 NVE 加密标志为 `true`在 Trident 中手动创建 NVE 卷。
+
+
+有关后端配置选项的更多信息，请参阅：
+
+* link:../trident-use/ontap-san-examples.html["ONTAP SAN 配置选项"]
+* link:../trident-use/ontap-nas-examples.html["ONTAP NAS 配置选项"]
+

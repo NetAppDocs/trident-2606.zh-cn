@@ -1,0 +1,228 @@
+---
+permalink: trident-protect/monitor-trident-protect-resources.html 
+sidebar: sidebar 
+keywords: manage, authentication, rbac 
+summary: 您可以使用 kube-state-metrics 和 Prometheus 监控 Trident Protect 资源的状态。这将为您提供有关部署、节点和 pod 的运行状况信息。 
+---
+= 监控 Trident Protect 资源
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+您可以使用 kube-state-metrics、Prometheus 和 Alertmanager 开源工具来监控受 Trident Protect 保护的资源的运行状况。
+
+kube-state-metrics 服务从 Kubernetes API 通信中生成指标。将它与 Trident Protect 一起使用可提供有关环境中资源状态的有用信息。
+
+Prometheus 是一个工具包，可以提取 kube-state-metrics 生成的数据，并将其呈现为有关这些对象的易读信息。kube-state-metrics 和 Prometheus 共同为您提供了一种方法，可以监控您使用 Trident Protect 管理的资源的运行状况和状态。
+
+Alertmanager 是一项服务，可接收 Prometheus 等工具发送的警报，并将其路由到您配置的目标。
+
+[NOTE]
+====
+这些步骤中包含的配置和指导只是示例；您需要自定义它们以匹配您的环境。有关具体说明和支持，请参阅以下官方文档：
+
+* https://github.com/kubernetes/kube-state-metrics/tree/main["kube-state-metrics 文档"^]
+* https://prometheus.io/docs/introduction/overview/["Prometheus 文档"^]
+* https://github.com/prometheus/alertmanager["Alertmanager 文档"^]
+
+
+====
+
+
+[[step-1-install-the-monitoring-tools]]
+== 步骤 1：安装监控工具
+
+要在 Trident Protect 中启用资源监控，需要安装和配置 kube-state-metrics、Prometheus 和 Alertmanager。
+
+
+
+[[install-kube-state-metrics]]
+=== 安装 kube-state-metrics
+
+您可以使用 Helm 安装 kube-state-metrics。
+
+.步骤
+. 添加 kube-state-metrics Helm chart。例如：
++
+[source, console]
+----
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+----
+. 将 Prometheus ServiceMonitor CRD 应用于集群：
++
+[source, console]
+----
+kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+----
+. 为 Helm 图表创建配置文件（例如， `metrics-config.yaml`）。您可以自定义以下示例配置以匹配您的环境：
++
+.metrics-config.yaml: kube-state-metrics Helm chart 配置
+[source, yaml]
+----
+---
+extraArgs:
+  # Collect only custom metrics
+  - --custom-resource-state-only=true
+
+customResourceState:
+  enabled: true
+  config:
+    kind: CustomResourceStateMetrics
+    spec:
+      resources:
+      - groupVersionKind:
+          group: protect.trident.netapp.io
+          kind: "Backup"
+          version: "v1"
+        labelsFromPath:
+          backup_uid: [metadata, uid]
+          backup_name: [metadata, name]
+          creation_time: [metadata, creationTimestamp]
+        metrics:
+        - name: backup_info
+          help: "Exposes details about the Backup state"
+          each:
+            type: Info
+            info:
+              labelsFromPath:
+                appVaultReference: ["spec", "appVaultRef"]
+                appReference: ["spec", "applicationRef"]
+rbac:
+  extraRules:
+  - apiGroups: ["protect.trident.netapp.io"]
+    resources: ["backups"]
+    verbs: ["list", "watch"]
+
+# Collect metrics from all namespaces
+namespaces: ""
+
+# Ensure that the metrics are collected by Prometheus
+prometheus:
+  monitor:
+    enabled: true
+----
+. 通过部署 Helm chart 安装 kube-state-metrics。例如：
++
+[source, console]
+----
+helm install custom-resource -f metrics-config.yaml prometheus-community/kube-state-metrics --version 5.21.0
+----
+. 按照 https://github.com/kubernetes/kube-state-metrics/blob/main/docs/metrics/extend/customresourcestate-metrics.md#custom-resource-state-metrics["kube-state-metrics 自定义资源文档"^]中的说明配置 kube-state-metrics，为 Trident Protect 使用的自定义资源生成指标。
+
+
+
+
+[[install-prometheus]]
+=== 安装 Prometheus
+
+您可以按照 https://prometheus.io/docs/prometheus/latest/installation/["Prometheus 文档"^]中的说明安装 Prometheus。
+
+
+
+[[install-alertmanager]]
+=== 安装 Alertmanager
+
+您可以按照 https://github.com/prometheus/alertmanager?tab=readme-ov-file#install["Alertmanager 文档"^]中的说明安装 Alertmanager。
+
+
+
+[[step-2-configure-the-monitoring-tools-to-work-together]]
+== 步骤 2：配置监控工具以协同工作
+
+安装监控工具后，需要将其配置为协同工作。
+
+.步骤
+. 将 kube-state-metrics 与 Prometheus 集成。编辑 Prometheus 配置文件(`prometheus.yaml`并添加 kube-state-metrics 服务信息。例如：
++
+.prometheus.yaml：kube-state-metrics 服务与 Prometheus 的集成
+[source, yaml]
+----
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: trident-protect
+data:
+  prometheus.yaml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: 'kube-state-metrics'
+        static_configs:
+          - targets: ['kube-state-metrics.trident-protect.svc:8080']
+----
+. 配置 Prometheus 以将警报路由到 Alertmanager。编辑 Prometheus 配置文件(`prometheus.yaml`）并添加以下部分：
++
+.prometheus.yaml：向 Alertmanager 发送警报
+[source, yaml]
+----
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager.trident-protect.svc:9093
+----
+
+
+.结果
+Prometheus 现在可以从 kube-state-metrics 收集指标，并向 Alertmanager 发送警报。您现在可以配置触发警报的条件以及应将警报发送到何处。
+
+
+
+[[step-3-configure-alerts-and-alert-destinations]]
+== 步骤 3：配置警报和警报目标
+
+将工具配置为协同工作后，需要配置触发警报的信息类型以及应将警报发送到何处。
+
+
+
+[[alert-example-backup-failure]]
+=== 警报示例：备份失败
+
+以下示例定义了在备份自定义资源的状态设置为 `Error` 5 秒或更长时间时触发的关键警报。您可以自定义此示例以匹配您的环境，并在 `prometheus.yaml`配置文件中包含此 YAML 代码段：
+
+.rules.yaml：为失败的备份定义 Prometheus 警报
+[source, yaml]
+----
+rules.yaml: |
+  groups:
+    - name: fail-backup
+        rules:
+          - alert: BackupFailed
+            expr: kube_customresource_backup_info{status="Error"}
+            for: 5s
+            labels:
+              severity: critical
+            annotations:
+              summary: "Backup failed"
+              description: "A backup has failed."
+----
+
+
+[[configure-alertmanager-to-send-alerts-to-other-channels]]
+=== 配置 Alertmanager 以向其他渠道发送警报
+
+您可以通过在  `alertmanager.yaml` 文件中指定相应的配置，将 Alertmanager 配置为向其他渠道（如电子邮件、PagerDuty、Microsoft Teams 或其他通知服务）发送通知。
+
+以下示例将 Alertmanager 配置为向 Slack 通道发送通知。要根据您的环境自定义此示例，请将  `api_url` 键的值替换为环境中使用的 Slack webhook URL：
+
+.alertmanager.yaml：向 Slack 频道发送警报
+[source, yaml]
+----
+data:
+  alertmanager.yaml: |
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: 'slack-notifications'
+    receivers:
+      - name: 'slack-notifications'
+        slack_configs:
+          - api_url: '<your-slack-webhook-url>'
+            channel: '#failed-backups-channel'
+            send_resolved: false
+----

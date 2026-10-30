@@ -1,0 +1,211 @@
+---
+sidebar: sidebar 
+permalink: trident-protect/trident-protect-requirements.html 
+keywords: trident protect, application, cluster, snapmirror replication, ontap, configuration 
+summary: 首先验证操作环境、应用程序群集、应用程序和许可证的准备情况。确保您的环境满足这些要求，以部署和运行 Trident Protect。 
+---
+= Trident Protect 要求
+:hardbreaks:
+:allow-uri-read: 
+:nofooter: 
+:icons: font
+:linkattrs: 
+:imagesdir: ../media/
+
+
+[role="lead"]
+首先验证操作环境、应用程序群集、应用程序和许可证的准备情况。确保您的环境满足这些要求，以部署和运行 Trident Protect。
+
+
+
+[[trident-protect-kubernetes-cluster-compatibility]]
+== Trident Protect Kubernetes 集群兼容性
+
+Trident Protect 与各种完全托管和自我托管的 Kubernetes 产品兼容，包括：
+
+* Amazon Elastic Kubernetes Service (EKS)
+* Google Kubernetes Engine (GKE)
+* Microsoft Azure Kubernetes Service (AKS)
+* Red Hat OpenShift
+* SUSE Harvester 1.7.0（ONTAP iSCSI）
+* SUSE Rancher
+* VMware Tanzu Portfolio
+* 上游 Kubernetes
+
+
+[NOTE]
+====
+* 仅 Linux 计算节点支持 Trident Protect 备份。备份操作不支持 Windows 计算节点。
+* 确保安装 Trident Protect 的集群配置了正在运行的快照控制器和相关 CRD。要安装快照控制器，请参阅 https://docs.netapp.com/us-en/trident/trident-use/vol-snapshots.html#deploy-a-volume-snapshot-controller["这些说明"]。
+* 确保至少存在一个 VolumeSnapshotClass。有关详细信息，请参阅 link:https://docs.netapp.com/us-en/trident/trident-reference/objects.html#kubernetes-volumesnapshotclass-objects["VolumeSnapshotClass"]。
+* 安装 Trident Protect 需要 Helm 4.x 或更高版本。
+
+
+====
+
+
+[[trident-protect-storage-backend-compatibility]]
+== Trident Protect 存储后端兼容性
+
+Trident Protect 支持以下存储后端：
+
+* Amazon FSx for NetApp ONTAP
+* Cloud Volumes ONTAP
+* ONTAP 存储阵列
+* Google Cloud NetApp Volumes
+* Azure NetApp Files
+
+
+请确保存储后端满足以下要求：
+
+* 请确保连接到集群的 NetApp 存储使用 Trident 24.02 或更高版本（建议使用 Trident 24.10）。
+
+
+* 确保您拥有 NetApp ONTAP 存储后端。
+* 确保已配置用于存储备份的对象存储桶。
+* 创建计划用于应用程序或应用程序数据管理操作的任何应用程序命名空间。Trident Protect 不会为您创建这些命名空间；如果在自定义资源中指定不存在的命名空间，则操作将失败。
+
+
+
+
+[[requirements-for-nas-economy-volumes]]
+== nas-economy 卷的要求
+
+Trident Protect 支持到 nas-economy 卷的备份和还原操作。当前不支持到 nas-economy 卷的快照、克隆和 SnapMirror 复制。您需要为计划用于 Trident Protect 的每个 nas-economy 卷启用快照目录。
+
+[NOTE]
+====
+某些应用程序与使用快照目录的卷不兼容。对于这些应用程序，需要通过在 ONTAP 存储系统上运行以下命令来隐藏快照目录：
+
+[source, console]
+----
+nfs modify -vserver <svm> -v3-hide-snapshot enabled
+----
+====
+您可以通过为每个 nas-economy 卷运行以下命令来启用快照目录，将  `<volume-UUID>` 替换为要更改的卷的 UUID：
+
+[source, console]
+----
+tridentctl update volume <volume-UUID> --snapshot-dir=true --pool-level=true -n trident
+----
+
+NOTE: 您可以通过将 Trident 后端配置选项 `snapshotDir`设置为 `true`来默认为新卷启用快照目录。现有卷不受影响。
+
+
+
+[[protecting-data-with-kubevirt-vms]]
+== 使用 KubeVirt VM 保护数据
+
+Trident Protect 在数据保护操作期间为 KubeVirt 虚拟机提供文件系统冻结和解冻功能，以确保数据一致性。虚拟机冻结操作的配置方法和默认行为因 Trident Protect 版本而异，较新的版本通过 Helm 图表参数提供简化的配置。
+
+
+NOTE: 在还原操作期间，不会还原为虚拟机 (VM) 创建的任何 `VirtualMachineSnapshots`。
+
+.Trident Protect 25.10 及更高版本
+[%collapsible%open]
+====
+Trident Protect 在数据保护操作期间自动冻结和解冻 KubeVirt 文件系统，以确保一致性。从 Trident Protect 25.10 开始，您可以在 Helm chart 安装期间使用  `vm.freeze` 参数禁用此行为。默认情况下，该参数处于启用状态。
+
+[source, console]
+----
+helm install ... --set vm.freeze=false ...
+----
+====
+.Trident Protect 24.10.1 至 25.06
+[%collapsible]
+====
+从 Trident Protect 24.10.1 开始，Trident Protect 在数据保护操作期间自动冻结和解冻 KubeVirt 文件系统。或者，您可以使用以下命令禁用此自动行为：
+
+[source, console]
+----
+kubectl set env deployment/trident-protect-controller-manager NEPTUNE_VM_FREEZE=false -n trident-protect
+----
+====
+.Trident Protect 24.10
+[%collapsible]
+====
+Trident Protect 24.10 不会在数据保护操作期间自动确保 KubeVirt VM 文件系统的一致状态。如果要使用 Trident Protect 24.10 保护 KubeVirt VM 数据，则需要在数据保护操作之前手动为文件系统启用冻结/解冻功能。这可确保文件系统处于一致状态。
+
+您可以通过 link:https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/virtualization/index["配置虚拟化"^] 配置 Trident Protect 24.10 来管理数据保护操作期间虚拟机文件系统的冻结和解冻，然后使用以下命令：
+
+[source, console]
+----
+kubectl set env deployment/trident-protect-controller-manager NEPTUNE_VM_FREEZE=true -n trident-protect
+----
+====
+要了解如何使用 Trident Protect 定义应用程序和还原虚拟机，请参见 link:trident-protect-kubevirt-vms.html["使用 Trident Protect 保护 KubeVirt 虚拟机"]。
+
+
+
+[[requirements-for-snapmirror-replication]]
+== SnapMirror 复制的要求
+
+NetApp SnapMirror 复制可用于以下 ONTAP 解决方案的 Trident Protect：
+
+* 本地 NetApp FAS、AFF 和 ASA 系统。目前 ASA r2 系统不支持使用 Trident 保护进行 SnapMirror 复制。
+* NetApp ONTAP Select
+* NetApp Cloud Volumes ONTAP
+* Amazon FSx for NetApp ONTAP
+
+
+
+
+[[ontap-cluster-requirements-for-snapmirror-replication]]
+=== ONTAP 集群对 SnapMirror 复制的要求
+
+如果计划使用 SnapMirror 复制，请确保您的 ONTAP 群集满足以下要求：
+
+* *NetApp Trident*：NetApp Trident 必须存在于使用 ONTAP 作为后端的源和目标 Kubernetes 集群上。Trident Protect 支持使用由以下驱动程序支持的存储类的 NetApp SnapMirror 技术进行复制：
++
+** `ontap-nas`：NFS
+** `ontap-san`：iSCSI
+** `ontap-san`：FC
+** `ontap-san`: NVMe/TCP（需要最低 ONTAP 版本 9.15.1）
+
+
+* *许可证*：必须在源和目标 ONTAP 集群上启用使用数据保护捆绑包的 ONTAP SnapMirror 异步许可证。请参阅  https://docs.netapp.com/us-en/ontap/data-protection/snapmirror-licensing-concept.html["ONTAP 中的 SnapMirror 许可概述"^] 以了解更多信息。
++
+从 ONTAP 9.10.1 开始，所有许可证都以 NetApp 许可证文件 (NLF) 的形式交付，该文件是启用多个功能的单个文件。有关详细信息，请参见link:https://docs.netapp.com/us-en/ontap/system-admin/manage-licenses-concept.html#licenses-included-with-ontap-one["ONTAP One 附带的许可证"^]。
+
++
+
+NOTE: 仅支持 SnapMirror 异步保护。
+
+
+
+
+
+[[peering-considerations-for-snapmirror-replication]]
+=== SnapMirror 复制的对等关系注意事项
+
+如果您计划使用存储后端对等，请确保您的环境满足以下要求：
+
+* *集群和 SVM*：必须对等 ONTAP 存储后端。请参阅  https://docs.netapp.com/us-en/ontap/peering/index.html["集群和 SVM 对等概述"^] 以了解更多信息。
++
+
+NOTE: 确保在两个 ONTAP 集群之间的复制关系中使用的 SVM 名称是唯一的。
+
+* *NetApp Trident 和 SVM*：对等远程 SVM 必须可用于目标集群上的 NetApp Trident。
+* *托管后端*：您需要在 Trident Protect 中添加和管理 ONTAP 存储后端，以创建复制关系。
+
+
+
+
+[[trident-ontap-configuration-for-snapmirror-replication]]
+=== 用于 SnapMirror 复制的 Trident / ONTAP 配置
+
+Trident Protect 要求您配置至少一个同时支持源和目标集群复制的存储后端。如果源和目标集群相同，目标应用程序应使用与源应用程序不同的存储后端，以获得最佳弹性。
+
+
+
+[[kubernetes-cluster-requirements-for-snapmirror-replication]]
+=== Kubernetes 集群 SnapMirror 复制需求
+
+确保 Kubernetes 集群满足以下要求：
+
+* *AppVault 可访问性*：源和目标集群必须具有网络访问权限才能从 AppVault 读取和写入以进行应用程序对象复制。
+* *网络连接*：配置防火墙规则、存储桶权限和 IP 允许列表，以启用两个集群和 AppVault 跨 WAN 之间的通信。
+
+
+
+NOTE: 许多企业环境在 WAN 连接上实施严格的防火墙策略。在配置复制之前，请与基础架构团队一起验证这些网络要求。

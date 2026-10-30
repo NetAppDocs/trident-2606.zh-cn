@@ -1,0 +1,22 @@
+---
+section: trident-reco
+title: 最佳实践和建议
+entries:
+- title: 部署
+  url: "/trident-reco/deploy-reco.html"
+- title: 存储配置
+  url: "/trident-reco/storage-config-best-practices.html"
+- title: Trident 集成
+  url: "/trident-reco/integrate-trident.html"
+- title: 数据保护和灾难恢复
+  url: "/trident-reco/backup.html"
+- title: 使用 Trident 自动化有状态应用程序的故障转移
+  url: "/trident-reco/force-detach.html"
+- title: 安全性
+  entries:
+  - title: 安全建议
+    url: "/trident-reco/security-reco.html"
+  - title: Linux 统一密钥设置 (LUKS)
+    url: "/trident-reco/security-luks.html"
+  - title: Kerberos 传输中加密
+    url: "/trident-reco/kerberos-inflight-encryption.html"

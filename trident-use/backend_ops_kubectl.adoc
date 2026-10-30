@@ -1,0 +1,82 @@
+---
+sidebar: sidebar 
+permalink: trident-use/backend_ops_kubectl.html 
+keywords: backends, storage system, anf, element, hci, solidfire, ontap, aff, fas, ontap select, configure backends, kubectl, create backends, delete backends, update backends, view backends 
+summary: '了解如何使用 `kubectl`执行后端管理操作。' 
+---
+= 使用 kubectl 管理 Trident 后端
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+了解如何使用 `kubectl`执行后端管理操作。
+
+
+
+[[delete-a-backend]]
+== 删除后端
+
+通过删除 `TridentBackendConfig`，您指示 Trident 删除/保留后端（基于 `deletionPolicy`）。要删除后端，请确保将 `deletionPolicy`设置为 delete。要仅删除 `TridentBackendConfig`，请确保将 `deletionPolicy`设置为 retain。这可以确保后端仍然存在，并且可以通过使用 `tridentctl`进行管理。
+
+运行以下命令：
+
+[listing]
+----
+kubectl delete tbc <tbc-name> -n trident
+----
+Trident 不会删除正在使用的 Kubernetes Secrets `TridentBackendConfig`。Kubernetes 用户负责清理机密。删除机密时必须谨慎行事。仅当机密未被后端使用时，才应将其删除。
+
+
+
+[[view-the-existing-backends]]
+== 查看现有后端
+
+运行以下命令：
+
+[listing]
+----
+kubectl get tbc -n trident
+----
+您还可以运行 `tridentctl get backend -n trident`或 `tridentctl get backend -o yaml -n trident`以获取所有现有后端的列表。此列表还将包括使用 `tridentctl`创建的后端。
+
+
+
+[[update-a-backend]]
+== 更新后端
+
+更新后端可能有多种原因：
+
+* 存储系统的凭据已更改。要更新凭据，必须更新  `TridentBackendConfig` 对象中使用的 Kubernetes Secret。Trident 将使用提供的最新凭据自动更新后端。运行以下命令以更新 Kubernetes Secret：
++
+[listing]
+----
+kubectl apply -f <updated-secret-file.yaml> -n trident
+----
+* 需要更新参数（例如正在使用的 ONTAP SVM 的名称）。
++
+** 您可以使用以下命令直接通过 Kubernetes 更新 `TridentBackendConfig`对象：
++
+[listing]
+----
+kubectl apply -f <updated-backend-file.yaml>
+----
+** 或者，您可以使用以下命令更改现有 `TridentBackendConfig` CR：
++
+[listing]
+----
+kubectl edit tbc <tbc-name> -n trident
+----
+
+
+
+
+[NOTE]
+====
+* 如果后端更新失败，则后端继续保持其最后已知的配置。您可以通过运行 `kubectl get tbc <tbc-name> -o yaml -n trident`或 `kubectl describe tbc <tbc-name> -n trident`来查看日志以确定原因。
+* 确定并更正配置文件的问题后，您可以重新运行更新命令。
+
+
+====

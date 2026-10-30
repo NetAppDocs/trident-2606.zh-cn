@@ -1,0 +1,88 @@
+---
+sidebar: sidebar 
+permalink: trident-managing-k8s/upgrade-trident.html 
+keywords: upgrade, trident, methods, operator, tridentctl, helm 
+summary: Trident 遵循四个月的发布节奏，每个日历年发布三个主要版本。每个新版本都建立在先前版本的基础上，提供新功能和性能增强以及错误修复和改进。建议您每年至少升级一次，以利用 Trident 中的新功能。 
+---
+= 升级 Trident
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+从 24.02 版本开始，Trident 遵循四个月的发布节奏，每个日历年发布三个主要版本。每个新版本都建立在先前版本的基础上，并提供新功能、性能增强、错误修复和改进。我们建议您每年至少升级一次，以利用 Trident 中的新功能。
+
+
+
+[[considerations-before-upgrading]]
+== 升级前的注意事项
+
+升级到最新版 Trident 时，请考虑以下事项：
+
+* 在给定的 Kubernetes 集群中的所有命名空间中应仅安装一个 Trident 实例。
+* Trident 23.07 及更高版本需要 v1 卷快照，不再支持 alpha 或 beta 快照。
+* 升级时，请务必提供 Trident 使用的 `parameter.fsType`中的 `StorageClasses`。您可以删除和重新创建 `StorageClasses`而不会中断先前存在的卷。
++
+** 这是强制执行  https://kubernetes.io/docs/tasks/configure-pod-container/security-context/["安全上下文"^] SAN 卷的**要求**。
+** https://github.com/NetApp/trident/tree/master/trident-installer/sample-input[sample input^] 目录包含示例，例如 https://github.com/NetApp/trident/blob/master/trident-installer/sample-input/storage-class-samples/storage-class-basic.yaml.templ[`storage-class-basic.yaml.templ`^] 和 link:https://github.com/NetApp/trident/blob/master/trident-installer/sample-input/storage-class-samples/storage-class-bronze-default.yaml[`storage-class-bronze-default.yaml`^]。
+** 有关详细信息，请参阅 link:../trident-rn.html["已知问题"]。
+
+
+
+
+
+
+[[step-1-select-a-version]]
+== 步骤 1：选择一个版本
+
+Trident 版本遵循基于日期的 `YY.MM`命名约定，其中"YY"是年份的最后两位数字，"MM"是月份。点版本遵循 `YY.MM.X`约定，其中"X"是补丁级别。您将根据要升级的版本选择要升级到的版本。
+
+* 您可以直接升级到安装版本的四个版本窗口内的任何目标版本。例如，您可以直接从 24.06（或任何 24.06 dot 版本）升级到 25.06。
+* 如果您要从四发布窗口之外的版本进行升级，请执行多步骤升级。使用您要从link:../earlier-versions.html["早期版本"]升级的升级说明升级到适合四发布窗口的最新版本。例如，如果您运行的是 23.07 并希望升级到 25.06：
++
+.. 首次从 23.07 升级到 24.06。
+.. 然后从 24.06 升级到 25.06。
+
+
+
+
+
+NOTE: 在 OpenShift Container Platform 上使用 Trident 操作员升级时，应升级到 Trident 21.01.1 或更高版本。随 21.01.0 发布的 Trident 操作员包含一个已在 21.01.1 中修复的已知问题。有关更多详细信息，请参阅 https://github.com/NetApp/trident/issues/517["在 GitHub 上的问题详细信息"^]。
+
+
+
+[[step-2-determine-the-original-installation-method]]
+== 步骤 2：确定原始安装方法
+
+要确定您最初用于安装 Trident 的版本：
+
+. 使用  `kubectl get pods -n trident` 检查 pod。
++
+** 如果没有操作员舱，则说明 Trident 是使用  `tridentctl` 安装的。
+** 如果有 operator pod，Trident 是使用 Trident operator 手动或使用 Helm 安装的。
+
+
+. 如果有操作员 pod，请使用  `kubectl describe torc` 来确定是否使用 Helm 安装了 Trident。
++
+** 如果有 Helm 标签，则说明 Trident 是使用 Helm 安装的。
+** 如果没有 Helm 标签，则使用 Trident 操作员手动安装 Trident。
+
+
+
+
+
+
+[[step-3-select-an-upgrade-method]]
+== 步骤 3：选择一种升级方法
+
+一般来说，您应该使用与初始安装相同的方法进行升级，但您可以link:../trident-install/kubernetes-deploy.html#moving-between-installation-methods["在安装方法之间移动"]。升级 Trident 有两种选择。
+
+* link:upgrade-operator.html["使用 Trident 操作员进行升级"]
++
+
+TIP: 我们建议您在使用 operator 升级之前查看link:upgrade-operator-overview.html["了解 operator 升级工作流程"]。
+
+* 
+

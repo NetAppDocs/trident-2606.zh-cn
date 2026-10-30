@@ -1,0 +1,136 @@
+---
+sidebar: sidebar 
+permalink: trident-use/vol-custom-name.html 
+keywords: volumes, volume name, custom volume name, on-demand volume snapshots, expand volumes, iscsci volumes, nfs volumes, expand, expansion, 
+summary: 'Trident 支持为创建的卷分配有意义的名称和标签，以便更容易识别、监控管理卷并将其映射到相应的 Kubernetes 资源 (PVC)。' 
+---
+= 自定义 Trident 卷名和标签
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+使用 Trident，您可以为创建的卷分配有意义的名称和标签。这有助于您识别卷并轻松映射到相应的 Kubernetes 资源 (PVC)。您还可以在后端级别定义模板，用于创建自定义卷名和自定义标签；您创建、导入或克隆的任何卷都将遵守模板。
+
+
+
+[[before-you-begin]]
+== 开始之前
+
+可定制的卷名和标签支持：
+
+* 卷创建、导入和克隆操作。
+* 对于  `ontap-nas-economy` 驱动程序，只有 Qtree 卷的名称符合名称模板。
+* 对于  `ontap-san-economy` 驱动程序，只有 LUN 名称符合名称模板。
+
+
+
+
+[[limitations]]
+== 限制
+
+* 自定义卷名仅与 ONTAP 本地驱动程序兼容。
+* 只有  `ontap-san`、 `ontap-nas` 和  `ontap-nas-flexgroup` 驱动程序才支持自定义标签。
+* 自定义卷名称不适用于现有卷。
+
+
+
+
+[[key-behaviors-of-customizable-volume-names]]
+== 可定制卷名的关键行为
+
+* 如果由于名称模板中的语法无效而发生故障，则后端创建将失败。但是，如果模板应用失败，将根据现有的命名约定命名卷。
+* 当卷使用后端配置中的名称模板命名时，存储前缀不适用。任何所需的前缀值都可以直接添加到模板中。
+
+
+
+
+[[backend-configuration-examples-with-name-template-and-labels]]
+== 使用名称模板和标签的后端配置示例
+
+可以在根和/或池级别定义自定义名称模板。
+
+.根级别示例
+[source, json]
+----
+{
+  "version": 1,
+  "storageDriverName": "ontap-nas",
+  "backendName": "ontap-nfs-backend",
+  "managementLIF": "<ip address>",
+  "svm": "svm0",
+  "username": "<admin>",
+  "password": "<password>",
+  "defaults": {
+    "nameTemplate": "{{.volume.Name}}_{{.labels.cluster}}_{{.volume.Namespace}}_{{.volume.RequestName}}"
+  },
+  "labels": {
+    "cluster": "ClusterA",
+    "PVC": "{{.volume.Namespace}}_{{.volume.RequestName}}"
+  }
+}
+----
+.Pool 级别示例
+[source, json]
+----
+{
+  "version": 1,
+  "storageDriverName": "ontap-nas",
+  "backendName": "ontap-nfs-backend",
+  "managementLIF": "<ip address>",
+  "svm": "svm0",
+  "username": "<admin>",
+  "password": "<password>",
+  "useREST": true,
+  "storage": [
+    {
+      "labels": {
+        "labelname": "label1",
+        "name": "{{ .volume.Name }}"
+      },
+      "defaults": {
+        "nameTemplate": "pool01_{{ .volume.Name }}_{{ .labels.cluster }}_{{ .volume.Namespace }}_{{ .volume.RequestName }}"
+      }
+    },
+    {
+      "labels": {
+        "cluster": "label2",
+        "name": "{{ .volume.Name }}"
+      },
+      "defaults": {
+        "nameTemplate": "pool02_{{ .volume.Name }}_{{ .labels.cluster }}_{{ .volume.Namespace }}_{{ .volume.RequestName }}"
+      }
+    }
+  ]
+}
+----
+
+
+[[name-template-examples]]
+== 命名模板示例
+
+*示例 1*：
+
+[listing]
+----
+"nameTemplate": "{{ .config.StoragePrefix }}_{{ .volume.Name }}_{{ .config.BackendName }}"
+----
+*示例 2*：
+
+[listing]
+----
+"nameTemplate": "pool_{{ .config.StoragePrefix }}_{{ .volume.Name }}_{{ slice .volume.RequestName 1 5 }}""
+----
+
+
+[[points-to-consider]]
+== 需要考虑的要点
+
+. 对于卷导入，仅当现有卷具有特定格式的标签时，才会更新标签。例如： `{"provisioning":{"Cluster":"ClusterA", "PVC": "pvcname"}}`。
+. 对于托管卷导入，卷名遵循后端定义中根级别定义的名称模板。
+. Trident 不支持使用带有存储前缀的切片操作符。
+. 如果模板没有产生唯一的卷名，Trident 将附加几个随机字符以创建唯一的卷名。
+. 如果 NAS 经济卷的自定义名称长度超过 64 个字符，Trident 将根据现有的命名约定命名卷。对于所有其他 ONTAP 驱动程序，如果卷名超过名称限制，则卷创建过程将失败。
+

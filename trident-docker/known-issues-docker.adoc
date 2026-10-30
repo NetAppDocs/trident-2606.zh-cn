@@ -1,0 +1,68 @@
+---
+sidebar: sidebar 
+permalink: trident-docker/known-issues-docker.html 
+keywords: known issues, trident, trident for docker, docker 
+summary: 查找有关在 Docker 中使用 Trident 的已知问题的信息。 
+---
+= 已知问题和限制
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+查找有关在 Docker 中使用 Trident 的已知问题和限制的信息。
+
+
+
+[[upgrading-trident-docker-volume-plugin-to-20-10-and-later-from-older-versions-results-in-upgrade-failure-with-the-no-such-file-or-directory-error]]
+== 将 Trident Docker Volume Plugin 从旧版本升级到 20.10 及更高版本会导致升级失败，并显示不存在此文件或目录错误。
+
+.临时解决策
+. 禁用插件。
++
+[source, console]
+----
+docker plugin disable -f netapp:latest
+----
+. 删除插件。
++
+[source, console]
+----
+docker plugin rm -f netapp:latest
+----
+. 通过提供额外 `config`参数重新安装插件。
++
+[source, console]
+----
+docker plugin install netapp/trident-plugin:20.10 --alias netapp --grant-all-permissions config=config.json
+----
+
+
+
+
+[[volume-names-must-be-a-minimum-of-2-characters-in-length]]
+== 卷名长度必须至少为 2 个字符。
+
+
+NOTE: 这是 Docker 客户端限制。客户端会将单个字符名称解释为 Windows 路径 https://github.com/moby/moby/issues/25773["请参见错误 25773"^]。
+
+
+
+[[docker-swarm-has-certain-behaviors-that-prevent-trident-from-supporting-it-with-every-storage-and-driver-combination]]
+== Docker Swarm 的某些行为会阻止 Trident 支持每种存储和驱动程序组合。
+
+* Docker Swarm 目前使用卷名而不是卷 ID 作为其唯一的卷标识符。
+* 卷请求同时发送到 Swarm 集群中的每个节点。
+* 卷插件（包括 Trident）必须在 Swarm 集群中的每个节点上独立运行。由于 ONTAP 的工作方式以及 `ontap-nas`和 `ontap-san`驱动程序的功能，它们是唯一能够在这些限制范围内运行的驱动程序。
+
+
+其余的驱动程序会受到诸如竞争条件之类的问题的影响，这些问题可能会导致为单个请求创建大量卷而没有明确的"赢家"；例如，Element 具有允许卷具有相同名称但不同 ID 的功能。
+
+NetApp 已经向 Docker 团队提供了反馈，但没有任何未来追索的迹象。
+
+
+
+[[if-a-flexgroup-is-being-provisioned-ontap-does-not-provision-a-second-flexgroup-if-the-second-flexgroup-has-one-or-more-aggregates-in-common-with-the-flexgroup-being-provisioned]]
+== 如果正在调配 FlexGroup，则当第二个 FlexGroup 与正在调配的 FlexGroup 具有一个或多个相同聚合时，ONTAP 不会调配第二个 FlexGroup。

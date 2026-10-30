@@ -1,0 +1,111 @@
+---
+sidebar: sidebar 
+permalink: trident-use/backend_ops_tridentctl.html 
+keywords: backends, storage system, anf, element, hci, solidfire, ontap, aff, fas, ontap select, configure backends, tridentctl, create backends, delete backends, view backends, update backends 
+summary: '了解如何使用 `tridentctl`执行后端管理操作。' 
+---
+= 使用 tridentctl 管理 Trident 后端
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+了解如何使用 `tridentctl`执行后端管理操作。
+
+
+
+[[create-a-backend]]
+== 创建后端
+
+创建 link:backends.html["后端配置文件"^] 后，运行以下命令：
+
+[listing]
+----
+tridentctl create backend -f <backend-file> -n trident
+----
+如果后端创建失败，则表示后端配置有问题。您可以通过运行以下命令查看日志以确定原因：
+
+[listing]
+----
+tridentctl logs -n trident
+----
+在识别并更正配置文件的问题后，只需再次运行此  `create` 命令即可。
+
+
+
+[[delete-a-backend]]
+== 删除后端
+
+要从 Trident 删除后端，请执行以下操作：
+
+. 检索后端名称：
++
+[listing]
+----
+tridentctl get backend -n trident
+----
+. 删除后端：
++
+[listing]
+----
+tridentctl delete backend <backend-name> -n trident
+----
+
+
+
+NOTE: 如果 Trident 已从此后端配置仍然存在的卷和快照，则删除后端会阻止其配置新卷。后端将继续处于"Deleting"状态。
+
+
+
+[[view-the-existing-backends]]
+== 查看现有后端
+
+要查看 Trident 知道的后端，请执行以下操作：
+
+* 要获取摘要，请运行以下命令：
++
+[listing]
+----
+tridentctl get backend -n trident
+----
+* 要获取所有详细信息，请运行以下命令：
++
+[listing]
+----
+tridentctl get backend -o json -n trident
+----
+
+
+
+
+[[update-a-backend]]
+== 更新后端
+
+创建新的后端配置文件后，运行以下命令：
+
+[listing]
+----
+tridentctl update backend <backend-name> -f <backend-file> -n trident
+----
+如果后端更新失败，则说明后端配置有问题或您尝试的更新无效。您可以通过运行以下命令查看日志以确定原因：
+
+[listing]
+----
+tridentctl logs -n trident
+----
+在识别并更正配置文件的问题后，只需再次运行此  `update` 命令即可。
+
+
+
+[[identify-the-storage-classes-that-use-a-backend]]
+== 标识使用后端的存储类
+
+这是一个示例，说明您可以使用  `tridentctl` 为后端对象输出的 JSON 来回答这类问题。这使用了  `jq` 实用程序，您需要安装它。
+
+[listing]
+----
+tridentctl get backend -o json | jq '[.items[] | {backend: .name, storageClasses: [.storage[].storageClasses]|unique}]'
+----
+这也适用于使用  `TridentBackendConfig` 创建的后端。

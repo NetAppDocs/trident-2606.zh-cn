@@ -1,0 +1,52 @@
+---
+section: trident-protect
+title: 使用 Trident Protect 保护应用程序
+entries:
+- title: 了解 Trident Protect
+  url: "/trident-protect/learn-about-trident-protect.html"
+- title: 安装 Trident Protect
+  entries:
+  - title: Trident Protect 要求
+    url: "/trident-protect/trident-protect-requirements.html"
+  - title: 安装 Trident Protect
+    url: "/trident-protect/trident-protect-installation.html"
+  - title: 安装 Trident Protect CLI 插件
+    url: "/trident-protect/trident-protect-cli.html"
+  - title: 自定义 Trident Protect 安装
+    url: "/trident-protect/trident-protect-customize-installation.html"
+- title: 管理 Trident Protect
+  entries:
+  - title: 管理授权和访问控制
+    url: "/trident-protect/manage-authorization-access-control.html"
+  - title: 监控 Trident Protect 资源
+    url: "/trident-protect/monitor-trident-protect-resources.html"
+  - title: 生成 Trident Protect 支持包
+    url: "/trident-protect/trident-protect-generate-support-bundle.html"
+  - title: 升级 Trident Protect
+    url: "/trident-protect/trident-protect-upgrade.html"
+- title: 管理和保护应用程序
+  entries:
+  - title: 使用 AppVault 对象管理存储桶
+    url: "/trident-protect/trident-protect-appvault-custom-resources.html"
+  - title: 定义用于管理的应用程序
+    url: "/trident-protect/trident-protect-manage-applications.html"
+  - title: 保护应用程序
+    url: "/trident-protect/trident-protect-protect-apps.html"
+  - title: 还原应用程序
+    entries:
+    - title: 使用 Trident Protect 还原应用程序
+      url: "/trident-protect/trident-protect-restore-apps.html"
+    - title: 使用高级还原设置
+      url: "/trident-protect/trident-protect-restore-settings.html"
+    - title: 还原期间修改资源
+      url: "/trident-protect/trident-protect-resource-transformations.html"
+  - title: 使用 NetApp SnapMirror 复制应用程序
+    url: "/trident-protect/trident-protect-use-snapmirror-replication.html"
+  - title: 迁移应用程序
+    url: "/trident-protect/trident-protect-migrate-apps.html"
+  - title: 保护 KubeVirt 虚拟机
+    url: "/trident-protect/trident-protect-kubevirt-vms.html"
+  - title: 使用 Trident Protect 管理执行挂钩
+    url: "/trident-protect/trident-protect-use-execution-hooks.html"
+- title: 卸载 Trident Protect
+  url: "/trident-protect/trident-protect-uninstall.html"

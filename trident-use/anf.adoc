@@ -1,0 +1,185 @@
+---
+sidebar: sidebar 
+permalink: trident-use/anf.html 
+keywords: trident backend, azure netapp files, smb volumes, smb, windows, drivers, access modes, rwo, rwx, rwp, rwop, file system, aks, managed identities, azure, azure government 
+summary: 将 Azure NetApp Files 配置为 Trident 的后端，并使用 NFS 或 SMB 卷。Trident 支持 AKS 集群上的托管身份和工作负载身份。 
+---
+= 配置 Azure NetApp Files 后端
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+使用 Azure NetApp Files 作为 Trident 的后端。此后端支持 NFS 和 SMB 卷。Trident 支持 Azure Kubernetes Service (AKS) 集群的托管身份和工作负载身份。
+
+
+
+[[supported-azure-cloud-environments]]
+== 支持的 Azure 云环境
+
+Trident 支持多个 Azure 云环境中的 Azure NetApp Files 后端。
+
+支持的 Azure 云包括：
+
+* Azure 商业版
+* Azure Government（Azure Government / MAG）
+* Azure 中国
+
+
+部署 Trident 或配置 Azure NetApp Files 后端时，请确保 Azure Resource Manager 和身份验证终结点与 Azure 云环境匹配。
+
+
+
+[[review-azure-netapp-files-driver-support]]
+== 查看 Azure NetApp Files 驱动程序支持
+
+Trident 提供了以下 Azure NetApp Files 存储驱动程序。
+
+支持的访问模式包括 _ReadWriteOnce_ (RWO)、_ReadOnlyMany_ (ROX)、_ReadWriteMany_ (RWX) 和 _ReadWriteOncePod_ (RWOP)。
+
+[cols="2,1,1,2,2"]
+|===
+| 驱动程序 | 协议 | volumeMode | 支持的访问模式 | 支持的文件系统 
+
+
+| `azure-netapp-files`  a| 
+NFS SMB
+ a| 
+Filesystem
+ a| 
+RWO、ROX、RWX、RWOP
+ a| 
+`nfs`, `smb`
+
+|===
+
+
+[[review-considerations]]
+== 查看考虑事项
+
+* Azure NetApp Files 不支持小于 50 GiB 的卷。当请求较小的卷时，Trident 会创建 50-GiB 卷。
+* Trident 仅支持将 SMB 卷挂载到在 Windows 节点上运行的 Pod。
+* 非商业 Azure 云中的 Azure NetApp Files 部署需要特定于云的 Azure Resource Manager 和身份验证端点。确保 Trident 和任何后端配置使用适合您的 Azure 云环境的端点。
+
+
+
+
+[[use-managed-identities-for-aks]]
+== 对 AKS 使用托管标识
+
+Trident 支持 link:https://learn.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview["托管标识"^] AKS 集群。
+
+如果使用  `tridentctl` 来创建或管理 Azure NetApp Files 后端，请确保为正确的 Azure 云环境配置它。
+
+要使用托管身份，必须具有：
+
+* 使用 AKS 部署的 Kubernetes 集群
+* 在 AKS Kubernetes 集群上配置的托管身份
+* Trident 已安装， `cloudProvider` 设置为  `"Azure"`
+
+
+[role="tabbed-block"]
+====
+.Trident 操作员
+--
+编辑  `tridentorchestrator_cr.yaml` 并设置  `cloudProvider` 为  `"Azure"`。
+
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentOrchestrator
+metadata:
+  name: trident
+spec:
+  debug: true
+  namespace: trident
+  imagePullPolicy: IfNotPresent
+  cloudProvider: "Azure"
+----
+--
+.Helm
+--
+以下示例安装 Trident 并通过环境变量 `cloudProvider`进行设置 `$CP`：
+
+[listing]
+----
+helm install trident trident-operator-100.2606.0.tgz --create-namespace --namespace <trident-namespace> --set cloudProvider=$CP
+----
+--
+.<code>tridentctl</code>
+--
+以下示例安装 Trident 并将  `cloud-provider` 标志设置为  `Azure`：
+
+[listing]
+----
+tridentctl install --cloud-provider="Azure" -n trident
+----
+--
+====
+
+
+[[use-workload-identity-for-aks]]
+== 使用 AKS 的工作负载标识
+
+工作负载标识使 Kubernetes Pod 能够通过作为工作负载标识进行身份验证来访问 Azure 资源。
+
+如果使用  `tridentctl` 来创建或管理 Azure NetApp Files 后端，请确保为正确的 Azure 云环境配置它。
+
+要使用工作负载标识，必须具有：
+
+* 使用 AKS 部署的 Kubernetes 集群
+* 在 AKS Kubernetes 集群上配置的工作负载标识和 oidc-issuer
+* 已安装 Trident，其中 `cloudProvider`设置为 `"Azure"`， `cloudIdentity`设置为工作负载身份值
+
+
+[role="tabbed-block"]
+====
+.Trident 操作员
+--
+编辑  `tridentorchestrator_cr.yaml` 并设置  `cloudProvider` 为  `"Azure"`。设置  `cloudIdentity` 为  `azure.workload.identity/client-id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxx`。
+
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentOrchestrator
+metadata:
+  name: trident
+spec:
+  debug: true
+  namespace: trident
+  imagePullPolicy: IfNotPresent
+  cloudProvider: "Azure"
+  cloudIdentity: 'azure.workload.identity/client-id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxx' # Edit
+----
+--
+.Helm
+--
+使用以下环境变量设置 *cloud-provider (CP)* 和 *cloud-identity (CI)* 标志的值：
+
+`export CP="Azure"`
+`export CI="'azure.workload.identity/client-id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxx'"`
+
+以下示例安装 Trident，并使用 `cloudProvider`进行设置，使用 `$CP`，并使用 `cloudIdentity`进行设置，使用 `$CI`：
+
+[listing]
+----
+helm install trident trident-operator-100.6.0.tgz --set cloudProvider=$CP --set cloudIdentity="$CI"
+----
+--
+.<code>tridentctl</code>
+--
+使用以下环境变量设置 *cloud provider* 和 *cloud identity* 标志的值：
+
+`export CP="Azure"`
+`export CI="azure.workload.identity/client-id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxx"`
+
+以下示例安装 Trident 并将 `cloud-provider`设置为 `$CP`并将 `cloud-identity`设置为 `$CI`：
+
+[listing]
+----
+tridentctl install --cloud-provider=$CP --cloud-identity="$CI" -n trident
+----
+--
+====

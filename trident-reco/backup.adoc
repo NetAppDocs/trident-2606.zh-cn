@@ -1,0 +1,136 @@
+---
+sidebar: sidebar 
+permalink: trident-reco/backup.html 
+keywords: data protection, replication, dr, disaster recovery, snapmirror, back up, snapshot, element, volume replication 
+summary: 了解 Trident 和使用 Trident 创建的卷的保护和恢复选项。您应该为每个具有持久性要求的应用程序制定数据保护和恢复策略。 
+---
+= Trident 数据保护和灾难恢复
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+了解 Trident 和使用 Trident 创建的卷的保护和恢复选项。您应该为每个具有持久性要求的应用程序制定数据保护和恢复策略。
+
+
+
+[[trident-replication-and-recovery]]
+== Trident 复制和恢复
+
+您可以创建备份以在发生灾难时还原 Trident。
+
+
+
+[[trident-replication]]
+=== Trident 复制
+
+Trident 使用 Kubernetes CRD 来存储和管理自己的状态，并使用 Kubernetes 集群 etcd 来存储其元数据。
+
+.步骤
+. 使用 link:https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/#backing-up-an-etcd-cluster["Kubernetes：备份 etcd 集群"^] 备份 Kubernetes 集群 etcd。
+. 将备份项目放置在 FlexVol 卷上
++
+
+NOTE: NetApp 建议您通过将 FlexVol 所在的 SVM 与另一个 SVM 建立 SnapMirror 关系来保护该 SVM。
+
+
+
+
+
+[[trident-recovery]]
+=== Trident 恢复
+
+使用 Kubernetes CRD 和 Kubernetes 集群 etcd snapshot，可以恢复 Trident。
+
+.步骤
+. 从目标 SVM 中，将包含 Kubernetes etcd 数据文件和证书的卷挂载到将设置为主节点的主机上。
+. 复制与 Kubernetes 集群相关的所有必需证书，位于  `/etc/kubernetes/pki` 下，以及 etcd 成员文件，位于  `/var/lib/etcd` 下。
+. 使用 link:https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/#restoring-an-etcd-cluster["Kubernetes：恢复 etcd 集群"^] 从 etcd 备份还原 Kubernetes 集群。
+. 运行 `kubectl get crd`以验证所有 Trident 自定义资源已出现并检索 Trident 对象以验证所有数据可用。
+
+
+
+
+[[svm-replication-and-recovery]]
+== SVM 复制和恢复
+
+Trident 无法配置复制关系，但是，存储管理员可以使用 https://docs.netapp.com/us-en/ontap/data-protection/snapmirror-svm-replication-concept.html["ONTAP SnapMirror"^]来复制 SVM。
+
+在发生灾难时，您可以激活 SnapMirror 目标 SVM 以开始提供数据。系统还原后，您可以切换回主系统。
+
+.关于此任务
+使用 SnapMirror SVM 复制功能时，请考虑以下事项：
+
+* 您应该为每个启用了 SVM-DR 的 SVM 创建一个独特的后端。
+* 配置存储类，仅在需要时选择复制的后端，以避免将不需要复制的卷调配到支持 SVM-DR 的后端。
+* 应用程序管理员应了解与复制相关的额外成本和复杂性，并在开始此过程之前仔细考虑其恢复计划。
+
+
+
+
+[[svm-replication]]
+=== SVM 复制
+
+您可以使用 link:https://docs.netapp.com/us-en/ontap/data-protection/snapmirror-svm-replication-workflow-concept.html["ONTAP：SnapMirror SVM 复制"^] 创建 SVM 复制关系。
+
+SnapMirror 允许您设置选项以控制要复制的内容。您需要知道在执行 <<使用 Trident 进行 SVM 恢复>> 时选择了哪些选项。
+
+* link:https://docs.netapp.com/us-en/ontap/data-protection/replicate-entire-svm-config-task.html["-identity-preserve true"^] 复制整个 SVM 配置。
+* link:https://docs.netapp.com/us-en/ontap/data-protection/exclude-lifs-svm-replication-task.html["-discard-configs network"^] 不包括 LIF 和相关网络设置。
+* link:https://docs.netapp.com/us-en/ontap/data-protection/exclude-network-name-service-svm-replication-task.html["-identity-preserve false"^] 仅复制卷和安全配置。
+
+
+
+
+[[svm-recovery-using-trident]]
+=== 使用 Trident 进行 SVM 恢复
+
+Trident 不会自动检测 SVM 故障。在发生灾难时，管理员可以手动启动 Trident 故障转移到新的 SVM。
+
+.步骤
+. 取消计划和正在进行的 SnapMirror 传输，断开复制关系，停止源 SVM，然后激活 SnapMirror 目标 SVM。
+. 如果在配置 SVM 复制时指定了 `-identity-preserve false`或 `-discard-config network`，请更新 Trident 后端定义文件中的 `managementLIF`和 `dataLIF`。
+. 确认  `storagePrefix` 存在于 Trident 后端定义文件中。此参数无法更改。省略  `storagePrefix` 将导致后端更新失败。
+. 使用以下命令更新所有必需的后端，以反映新的目标 SVM 名称：
++
+[listing]
+----
+./tridentctl update backend <backend-name> -f <backend-json-file> -n <namespace>
+----
+. 如果指定了  `-identity-preserve false` 或  `discard-config network`，则必须重启所有应用程序 Pod。
++
+
+NOTE: 如果指定 `-identity-preserve true`，则在激活目标 SVM 时，由 Trident 配置的所有卷都开始提供数据。
+
+
+
+
+
+[[volume-replication-and-recovery]]
+== 卷复制和恢复
+
+Trident 无法配置 SnapMirror 复制关系，但存储管理员可以使用 link:https://docs.netapp.com/us-en/ontap/data-protection/snapmirror-disaster-recovery-concept.html["ONTAP SnapMirror 复制和恢复"^] 来复制由 Trident 创建的卷。
+
+然后，您可以使用 link:../trident-use/vol-import.html["tridentctl volume import"] 将恢复的卷导入 Trident。
+
+
+NOTE:  `ontap-san-economy` 驱动程序支持卷导入。使用  `ontap-nas-economy` 驱动程序导入 Qtree 是一项技术预览功能，不支持在生产环境中使用。 `ontap-flexgroup-economy` 驱动程序不支持导入。有关详细信息，请参见 link:../trident-use/vol-import.html["导入 Trident 卷"]。
+
+
+
+[[snapshot-data-protection]]
+== Snapshot 数据保护
+
+您可以使用以下方式保护和恢复数据：
+
+* 用于创建持久卷 (PV) 的 Kubernetes 卷快照的外部快照控制器和 CRD。
++
+link:../trident-use/vol-snapshots.html["卷快照"]
+
+* ONTAP Snapshots 可还原卷的整个内容或恢复单个文件或 LUN。
++
+link:https://docs.netapp.com/us-en/ontap/data-protection/manage-local-snapshot-copies-concept.html["ONTAP 快照"^]
+
+

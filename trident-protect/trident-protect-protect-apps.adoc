@@ -1,0 +1,510 @@
+---
+sidebar: sidebar 
+permalink: trident-protect/trident-protect-protect-apps.html 
+keywords: protect, snapshots, demand, configuration, cluster, appvault 
+summary: 通过使用自动保护策略或临时拍摄快照和备份来保护所有应用。 
+---
+= 使用 Trident Protect 保护应用程序
+:hardbreaks:
+:allow-uri-read: 
+:nofooter: 
+:icons: font
+:linkattrs: 
+:imagesdir: ../media/
+
+
+[role="lead"]
+您可以通过使用自动保护策略或临时拍摄快照和备份来保护 Trident Protect 管理的所有应用。
+
+
+NOTE: 您可以配置 Trident Protect 在数据保护操作期间冻结和解冻文件系统。link:trident-protect-requirements.html#protecting-data-with-kubevirt-vms["详细了解如何使用 Trident Protect 配置文件系统冻结"]。
+
+
+
+[[create-an-on-demand-snapshot]]
+== 创建按需快照
+
+您可以随时创建按需快照。
+
+
+NOTE: 如果集群范围的资源在应用程序定义中显式引用，或者它们引用了任何应用程序命名空间，则会包含在备份、快照或克隆中。
+
+[role="tabbed-block"]
+====
+.使用 CR 创建快照
+--
+.步骤
+. 创建自定义资源 (CR) 文件并将其命名为 `trident-protect-snapshot-cr.yaml`。
+. 在创建的文件中，配置以下属性：
++
+** *metadata.name*：（_Required_）此自定义资源的名称；为您的环境选择一个唯一且合理的名称。
+** *spec.applicationRef*：要快照的应用程序的 Kubernetes 名称。
+** *spec.appVaultRef*：（_必需_）应存储快照内容（元数据）的 AppVault 的名称。
+** *spec.reclaimPolicy*：（_可选_）定义删除快照 CR 时快照的 AppArchive 会发生什么情况。这意味着即使设置为 `Retain`，快照也将被删除。有效选项：
++
+*** `Retain` (默认)
+*** `Delete`
++
+[source, yaml]
+----
+apiVersion: protect.trident.netapp.io/v1
+kind: Snapshot
+metadata:
+  namespace: my-app-namespace
+  name: my-cr-name
+spec:
+  applicationRef: my-application
+  appVaultRef: appvault-name
+  reclaimPolicy: Delete
+----
+
+
+
+
+. 使用正确的值填充 `trident-protect-snapshot-cr.yaml`文件后，应用 CR：
++
+[source, console]
+----
+kubectl apply -f trident-protect-snapshot-cr.yaml
+----
+
+
+--
+.使用 CLI 创建快照
+--
+.步骤
+. 创建快照，用环境中的信息替换括号中的值。例如：
++
+[source, console]
+----
+tridentctl-protect create snapshot <my_snapshot_name> --appvault <my_appvault_name> --app <name_of_app_to_snapshot> -n <application_namespace>
+----
+
+
+--
+====
+
+
+[[create-an-on-demand-backup]]
+== 创建按需备份
+
+您可以随时备份应用程序。
+
+
+NOTE: 如果集群范围的资源在应用程序定义中显式引用，或者它们引用了任何应用程序命名空间，则会包含在备份、快照或克隆中。
+
+.开始之前
+确保 AWS 会话令牌过期时间足以支持任何长时间运行的 s3 备份操作。如果令牌在备份操作期间过期，操作可能会失败。
+
+* 有关检查当前会话令牌过期的详细信息，请参见 https://docs.aws.amazon.com/STS/latest/APIReference/API_GetSessionToken.html["AWS API 文档"^]。
+* 有关 AWS 资源凭据的详细信息，请参见 https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_use-resources.html["AWS IAM 文档"^]。
+
+
+[role="tabbed-block"]
+====
+.使用 CR 创建备份
+--
+.步骤
+. 创建自定义资源 (CR) 文件并将其命名为 `trident-protect-backup-cr.yaml`。
+. 在创建的文件中，配置以下属性：
++
+** *metadata.name*：（_Required_）此自定义资源的名称；为您的环境选择一个唯一且合理的名称。
+** *spec.applicationRef*：（_必需_）要备份的应用程序的 Kubernetes 名称。
+** *spec.appVaultRef*：（_必需_）应存储备份内容的 AppVault 的名称。
+** *spec.dataMover*: (_Optional_) 一个字符串，指示要用于备份操作的备份工具。可能的值（区分大小写）：
++
+*** `Restic`
+*** `Kopia` (默认)
+
+
+** *spec.reclaimPolicy*：（_可选_）定义从声明中释放备份时会发生什么。可能的值：
++
+*** `Delete`
+*** `Retain` (默认)
+
+
+** *spec.snapshotRef*: (_Optional_): 要用作备份源的快照的名称。如果未提供，将创建并备份临时快照。
++
+示例 YAML：
+
++
+[source, yaml]
+----
+---
+apiVersion: protect.trident.netapp.io/v1
+kind: Backup
+metadata:
+  namespace: my-app-namespace
+  name: my-cr-name
+spec:
+  applicationRef: my-application
+  appVaultRef: appvault-name
+  dataMover: Kopia
+----
+
+
+. 使用正确的值填充 `trident-protect-backup-cr.yaml`文件后，应用 CR：
++
+[source, console]
+----
+kubectl apply -f trident-protect-backup-cr.yaml
+----
+
+
+--
+.使用 CLI 创建备份
+--
+.步骤
+. 创建备份，用环境中的信息替换括号中的值。例如：
++
+[source, console]
+----
+tridentctl-protect create backup <my_backup_name> --appvault <my-vault-name> --app <name_of_app_to_back_up> --data-mover <Kopia_or_Restic> -n <application_namespace>
+----
++
+您可以选择使用  `--full-backup` 标志来指定备份是否应为非增量备份。默认情况下，所有备份都是增量备份。使用此标志时，备份将变为非增量备份。最佳做法是定期执行完整备份，然后在两次完整备份之间执行增量备份，以最大限度地降低与恢复相关的风险。
+
+
+
+--
+====
+
+
+[[supported-backup-annotations]]
+=== 支持的备份注释
+
+下表介绍了创建备份 CR 时可以使用的批注：
+
+[cols="2,1,3,1"]
+|===
+| 标注 | 类型 | 说明 | 默认值 
+
+
+| protect.trident.netapp.io/full-backup | string | 指定备份是否应为非增量备份。设置为 `true`以创建非增量备份。最佳做法是定期执行完整备份，然后在两次完整备份之间执行增量备份，以最大限度地降低与恢复相关的风险。 | "false" 
+
+
+| protect.trident.netapp.io/snapshot-completion-timeout | string | 整个快照操作完成所允许的最长时间。 | “60 分钟” 
+
+
+| protect.trident.netapp.io/volume-snapshots-ready-to-use-timeout | string | 允许卷快照达到准备就绪状态的最长时间。 | "30 分钟" 
+
+
+| protect.trident.netapp.io/volume-snapshots-created-timeout | string | 允许创建卷快照的最长时间。 | "5 分钟" 
+
+
+| protect.trident.netapp.io/pvc-bind-timeout-sec | string | 在操作失败之前，等待任何新创建的 PersistentVolumeClaims (PVC) 到达 `Bound`阶段的最长时间（以秒为单位）。 | "1200"（20 分钟） 
+|===
+
+
+[[create-a-data-protection-schedule]]
+== 创建数据保护计划
+
+保护策略通过按定义的时间表创建快照、备份或同时创建快照和备份来保护应用。您可以选择每小时、每天、每周和每月创建快照和备份，还可以指定要保留的副本数。您可以使用 full-backup-rule 注释安排非增量完整备份。默认情况下，所有备份都是增量备份。定期执行完整备份以及之间的增量备份有助于降低与恢复相关的风险。
+
+[NOTE]
+====
+* 您只能通过将 `backupRetention`设置为零并将 `snapshotRetention`设置为大于零的值来创建快照计划。将 `snapshotRetention`设置为零意味着任何计划备份仍将创建快照，但这些快照是临时的，并在备份完成后立即删除。
+* 如果集群范围的资源在应用程序定义中显式引用，或者它们引用了任何应用程序命名空间，则会包含在备份、快照或克隆中。
+
+
+====
+[role="tabbed-block"]
+====
+.使用 CR 创建计划
+--
+.步骤
+. 创建自定义资源 (CR) 文件并将其命名为 `trident-protect-schedule-cr.yaml`。
+. 在创建的文件中，配置以下属性：
++
+** *metadata.name*：（_Required_）此自定义资源的名称；为您的环境选择一个唯一且合理的名称。
+** *spec.dataMover*: (_Optional_) 一个字符串，指示要用于备份操作的备份工具。可能的值（区分大小写）：
++
+*** `Restic`
+*** `Kopia` (默认)
+
+
+** *spec.applicationRef*：要备份的应用程序的 Kubernetes 名称。
+** *spec.appVaultRef*：（_必需_）应存储备份内容的 AppVault 的名称。
+** *spec.backupRetention*：（_Required_）要保留的备份数量。零表示不应创建备份（仅限快照）。
+** *spec.backupReclaimPolicy*：（_可选_）确定如果备份 CR 在其保留期间被删除，备份会发生什么情况。保留期限过后，始终会删除备份。可能的值（区分大小写）：
++
+*** `Retain` (默认)
+*** `Delete`
+
+
+** *spec.snapshotRetention*：（_Required_）要保留的快照数。零表示不应创建快照。
+** *spec.snapshotReclaimPolicy*：（_可选_）确定如果快照 CR 在其保留期间被删除，快照会发生什么情况。保留期过后，快照始终被删除。可能的值（区分大小写）：
++
+*** `Retain`
+*** `Delete` (默认)
+
+
+** *spec.granularity*：计划应运行的频率。可能的值以及必需的相关字段：
++
+*** `Hourly` (要求您指定 `spec.minute`)
+*** `Daily` （要求您指定  `spec.minute` 和  `spec.hour`）
+*** `Weekly`（要求您指定  `spec.minute, spec.hour` 和  `spec.dayOfWeek`）
+*** `Monthly`（要求您指定  `spec.minute, spec.hour` 和  `spec.dayOfMonth`）
+*** `Custom`
+
+
+** *spec.dayOfMonth*：（_Optional_）应运行计划的月份日期（1 - 31）。如果粒度设置为 `Monthly`，则此字段为必填字段。该值必须以字符串形式提供。
+** *spec.dayOfWeek*：（_Optional_）应运行计划的星期几（0 - 7）。值 0 或 7 表示星期天。如果粒度设置为 `Weekly`，则此字段为必填字段。该值必须以字符串形式提供。
+** *spec.hour*：（_Optional_）应运行计划的一天中的小时（0 - 23）。如果粒度设置为 `Daily`、 `Weekly`或 `Monthly`，则此字段为必填字段。该值必须以字符串形式提供。
+** *spec.minute*：（_Optional_）计划应运行的小时中的分钟数（0 - 59）。如果粒度设置为 `Hourly`、 `Daily`、 `Weekly`或 `Monthly`，则此字段为必填字段。该值必须以字符串形式提供。
+** *spec.runImmediately*：（_可选_）设置为  `true` 以在创建计划时触发一次性的即时基线运行（根据保留设置进行备份和/或快照）。默认为  `false`。这不会修改后续重复周期。
++
+备份和快照计划的 YAML 示例：
+
++
+[source, yaml]
+----
+---
+apiVersion: protect.trident.netapp.io/v1
+kind: Schedule
+metadata:
+  namespace: my-app-namespace
+  name: my-cr-name
+spec:
+  dataMover: Kopia
+  applicationRef: my-application
+  appVaultRef: appvault-name
+  backupRetention: "15"
+  snapshotRetention: "15"
+  granularity: Daily
+  hour: "0"
+  minute: "0"
+----
++
+仅快照计划的 YAML 示例：
+
++
+[source, yaml]
+----
+---
+apiVersion: protect.trident.netapp.io/v1
+kind: Schedule
+metadata:
+  namespace: my-app-namespace
+  name: my-snapshot-schedule
+spec:
+  applicationRef: my-application
+  appVaultRef: appvault-name
+  backupRetention: "0"
+  snapshotRetention: "15"
+  granularity: Daily
+  hour: "2"
+  minute: "0"
+----
++
+立即运行的计划的示例 YAML：
+
++
+[source, yaml]
+----
+---
+apiVersion: protect.trident.netapp.io/v1
+kind: Schedule
+metadata:
+  namespace: my-app-namespace
+  name: my-daily-schedule-run-immediately
+spec:
+  applicationRef: my-application
+  appVaultRef: appvault-name
+  backupRetention: "7"
+  snapshotRetention: "7"
+  granularity: Daily
+  hour: "3"
+  minute: "0"
+  runImmediately: true
+----
+
+
+. 使用正确的值填充 `trident-protect-schedule-cr.yaml`文件后，应用 CR：
++
+[source, console]
+----
+kubectl apply -f trident-protect-schedule-cr.yaml
+----
+
+
+--
+.使用 CLI 创建计划
+--
+.步骤
+. 创建保护计划，用环境中的信息替换括号中的值。例如：
++
+
+NOTE: 您可以使用 `tridentctl-protect create schedule --help`查看此命令的详细帮助信息。
+
++
+[source, console]
+----
+tridentctl-protect create schedule <my_schedule_name> \
+  --appvault <my_appvault_name> \
+  --app <name_of_app_to_snapshot> \
+  --backup-retention <how_many_backups_to_retain> \
+  --backup-reclaim-policy <Retain|Delete (default Retain)> \
+  --data-mover <Kopia_or_Restic> \
+  --day-of-month <day_of_month_to_run_schedule> \
+  --day-of-week <day_of_week_to_run_schedule> \
+  --granularity <frequency_to_run> \
+  --hour <hour_of_day_to_run> \
+  --minute <minute_of_hour_to_run> \
+  --recurrence-rule <recurrence> \
+  --snapshot-retention <how_many_snapshots_to_retain> \
+  --snapshot-reclaim-policy <Retain|Delete (default Delete)> \
+  --full-backup-rule <string> \
+  --run-immediately <true|false> \
+  -n <application_namespace>
+----
++
+以下标记为您的日程安排提供了额外的控制：
+
++
+** *完全备份计划*：使用  `--full-backup-rule` 标志来计划非增量完全备份。此标志仅适用于  `--granularity Daily`。可能的值：
++
+*** `Always`: 每天创建完整备份。
+*** 特定工作日：指定一个或多个以逗号分隔的日期（例如， `"Monday,Thursday"`）。有效值：Monday、Tuesday、Wednesday、Thursday、Friday、Saturday、Sunday。
++
+
+NOTE: 此 `--full-backup-rule`标记不适用于每小时、每周或每月粒度。
+
+
+
+** *立即基线保护*：使用  `--run-immediately true` 在创建计划时立即创建初始备份或快照，而不是等待第一个计划的运行时间。默认值为  `false`。
+** *仅快照计划*：设置  `--backup-retention 0` 并为  `--snapshot-retention` 指定一个大于零的值。
+
+
+
+
+--
+====
+
+
+[[supported-schedule-annotations]]
+=== 支持的计划注释
+
+下表介绍了创建计划 CR 时可以使用的批注：
+
+[cols="2,1,3,1"]
+|===
+| 标注 | 类型 | 说明 | 默认值 
+
+
+| protect.trident.netapp.io/full-backup-rule | string | 指定计划完整备份的规则。您可以将其设置为 `Always`以进行持续完整备份，也可以根据您的要求进行自定义。例如，如果选择每日粒度，则可以指定应进行完整备份的工作日（例如， `"Monday,Thursday"`）。有效的工作日值为：Monday、Tuesday、Wednesday、Thursday、Friday、Saturday、Sunday。请注意，此批注只能用于将 `granularity`设置为 `Daily`的计划。 | 未设置（所有备份都是增量备份） 
+
+
+| protect.trident.netapp.io/snapshot-completion-timeout | string | 整个快照操作完成所允许的最长时间。 | “60 分钟” 
+
+
+| protect.trident.netapp.io/volume-snapshots-ready-to-use-timeout | string | 允许卷快照达到准备就绪状态的最长时间。 | "30 分钟" 
+
+
+| protect.trident.netapp.io/volume-snapshots-created-timeout | string | 允许创建卷快照的最长时间。 | "5 分钟" 
+
+
+| protect.trident.netapp.io/pvc-bind-timeout-sec | string | 在操作失败之前，等待任何新创建的 PersistentVolumeClaims (PVC) 到达 `Bound`阶段的最长时间（以秒为单位）。 | "1200"（20 分钟） 
+|===
+
+
+[[delete-a-snapshot]]
+== 删除快照
+
+删除不再需要的计划快照或按需快照。
+
+.步骤
+. 删除与快照关联的快照 CR：
++
+[source, console]
+----
+kubectl delete snapshot <snapshot_name> -n my-app-namespace
+----
+
+
+
+
+[[delete-a-backup]]
+== 删除备份
+
+删除不再需要的计划备份或按需备份。
+
+
+NOTE: 确保将回收策略设置为  `Delete` 以从对象存储中删除所有备份数据。策略的默认设置是  `Retain` 以避免意外数据丢失。如果策略未更改为  `Delete`，则备份数据将保留在对象存储中，并需要手动删除。
+
+.步骤
+. 删除与备份关联的备份 CR：
++
+[source, console]
+----
+kubectl delete backup <backup_name> -n my-app-namespace
+----
+
+
+
+
+[[check-the-status-of-a-backup-operation]]
+== 检查备份操作的状态
+
+您可以使用命令行检查正在进行、已完成或已失败的备份操作的状态。
+
+.步骤
+. 使用以下命令可检索备份操作的状态，用环境中的信息替换括号中的值：
++
+[source, console]
+----
+kubectl get backup -n <namespace_name> <my_backup_cr_name> -o jsonpath='{.status}'
+----
+
+
+
+
+[[enable-backup-and-restore-for-azure-netapp-files-anf-operations]]
+== 为 azure-netapp-files (ANF) 操作启用备份和还原
+
+如果您已安装 Trident Protect，则可以为使用 azure-netapp-files 存储类并在 Trident 24.06 之前创建的存储后端启用节省空间的备份和恢复功能。此功能适用于 NFSv4 卷，不会消耗容量池中的额外空间。
+
+.开始之前
+确保以下内容：
+
+* 您已安装 Trident Protect。
+* 您已在 Trident Protect 中定义了一个应用程序。在完成此过程之前，此应用程序将具有有限的保护功能。
+* 您已选择  `azure-netapp-files` 作为存储后端的默认存储类。
+
+
+.展开以查看配置步骤
+[%collapsible]
+====
+. 如果 ANF 卷是在升级到 Trident 24.10 之前创建的，请在 Trident 中执行以下操作：
++
+.. 为每个基于 azure-netapp-files 并与应用程序关联的 PV 启用快照目录：
++
+[source, console]
+----
+tridentctl update volume <pv name> --snapshot-dir=true -n trident
+----
+.. 确认已为每个关联的 PV 启用快照目录：
++
+[source, console]
+----
+tridentctl get volume <pv name> -n trident -o yaml | grep snapshotDir
+----
++
+响应：
+
++
+[listing]
+----
+snapshotDirectory: "true"
+----
++
+未启用快照目录时，Trident Protect 会选择常规备份功能，该功能在备份过程中会暂时占用容量池中的空间。在这种情况下，请确保容量池中有足够的空间可用于创建要备份的卷大小的临时卷。
+
+
+
+
+
+.结果
+该应用程序可以使用 Trident Protect 进行备份和还原。每个 PVC 也可供其他应用程序用于备份和还原。
+
+====

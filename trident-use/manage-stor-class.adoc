@@ -1,0 +1,104 @@
+---
+sidebar: sidebar 
+permalink: trident-use/manage-stor-class.html 
+keywords: storage class, manage storage class, storage classes, kubernetes storage classes 
+summary: 您可以查看现有存储类、设置默认存储类、标识存储类后端以及删除存储类。 
+---
+= 管理 Trident 存储类
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+您可以查看现有存储类、设置默认存储类、标识存储类后端以及删除存储类。
+
+
+
+[[view-the-existing-storage-classes]]
+== 查看现有存储类
+
+* 要查看现有的 Kubernetes 存储类，请运行以下命令：
+
+
+[listing]
+----
+kubectl get storageclass
+----
+* 要查看 Kubernetes 存储类详细信息，请运行以下命令：
+
+
+[listing]
+----
+kubectl get storageclass <storage-class> -o json
+----
+* 要查看 Trident 的同步存储类，请运行以下命令：
+
+
+[listing]
+----
+tridentctl get storageclass
+----
+* 要查看 Trident 的同步存储类详细信息，请运行以下命令：
+
+
+[listing]
+----
+tridentctl get storageclass <storage-class> -o json
+----
+
+
+[[set-a-default-storage-class]]
+== 设置默认存储类
+
+Kubernetes 1.6 增加了设置默认存储类的功能。如果用户未在 Persistent Volume Claim (PVC) 中指定存储类，则此存储类将用于配置 Persistent Volume。
+
+* 通过在存储类定义中将注释 `storageclass.kubernetes.io/is-default-class`设置为 true 来定义默认存储类。根据规范，注释的任何其他值或缺失将被解释为 false。
+* 您可以使用以下命令将现有存储类配置为默认存储类：
+
+
+[listing]
+----
+kubectl patch storageclass <storage-class-name> -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+----
+* 类似地，您可以使用以下命令删除默认存储类注释：
+
+
+[listing]
+----
+kubectl patch storageclass <storage-class-name> -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}'
+----
+Trident 安装程序包中还有包含此注释的示例。
+
+
+NOTE: 群集中一次只能有一个默认存储类。从技术上讲，Kubernetes 不会阻止您拥有多个存储类，但它会表现得好像根本没有默认存储类一样。
+
+
+
+[[identify-the-backend-for-a-storage-class]]
+== 标识存储类的后端
+
+这是一个示例，说明您可以使用  `tridentctl` 为 Trident 后端对象输出的 JSON 来回答的问题类型。这使用了  `jq` 实用程序，您可能需要先安装它。
+
+[listing]
+----
+tridentctl get storageclass -o json | jq  '[.items[] | {storageClass: .Config.name, backends: [.storage]|unique}]'
+----
+
+
+[[delete-a-storage-class]]
+== 删除存储类
+
+要从 Kubernetes 中删除存储类，请运行以下命令：
+
+[listing]
+----
+kubectl delete storageclass <storage-class>
+----
+`<storage-class>` 应替换为您的存储类。
+
+通过此存储类创建的任何持久卷将保持不变，Trident 将继续管理它们。
+
+
+NOTE: Trident 为其创建的卷强制使用空白 `fsType`。对于 iSCSI 后端，建议在 StorageClass 中强制执行 `parameters.fsType`。您应该删除现有的 StorageClasses 并使用指定的 `parameters.fsType`重新创建它们。

@@ -1,0 +1,241 @@
+---
+sidebar: sidebar 
+permalink: trident-use/gcnv.html 
+keywords: Trident backend, Google Cloud NetApp Volumes, NAS, NFS, SMB, file storage, GKE 
+summary: 配置 Trident 以从 Google Cloud NetApp Volumes 进行存储配置。 
+---
+= 配置 Google Cloud NetApp Volumes
+:allow-uri-read: 
+
+
+[role="lead"]
+您可以将 Google Cloud NetApp Volumes 配置为 Trident 的后端，以便为 Kubernetes 工作负载配置存储。
+
+
+
+[[overview]]
+== 概述
+
+Trident 支持用于 NAS (NFS 和 SMB) 和块 (iSCSI) 工作负载的 Google Cloud NetApp Volumes。
+
+* NAS 工作负载使用  `google-cloud-netapp-volumes` 后端
+* 块 (iSCSI) 工作负载使用  `google-cloud-netapp-volumes-san` 后端
+
+
+NAS 卷提供基于文件的存储，并使用 NFS 或 SMB 协议进行访问。这些卷支持跨多个 pod 或节点的共享访问。
+
+块卷提供原始块存储，并作为连接到 Kubernetes 节点的 iSCSI 设备进行访问。当应用程序需要块级访问时，将使用这些卷。
+
+这适用于以下环境：
+
+* Trident 26.02 及更高版本
+* Google Kubernetes Engine (GKE) 或 Red Hat OpenShift
+* Google Cloud NetApp Volumes 存储池
+
+
+要配置块 (iSCSI) 存储，请参见 link:gcnv-block.html["配置块存储 (iSCSI)"]。
+
+
+
+[[prepare-to-configure]]
+== 准备配置
+
+云身份使 Kubernetes 工作负载能够通过作为工作负载身份进行身份验证而不是使用静态凭据来访问 Google Cloud 资源。
+
+要在 Google Cloud NetApp Volumes 中使用云标识，必须具有：
+
+* 使用 Google Kubernetes Engine (GKE) 部署的 Kubernetes 集群
+* 已在 GKE 群集上启用工作负载标识，已在节点池上启用元数据服务器
+* 具有 Google Cloud NetApp Volumes Admin 角色(`roles/netapp.admin`）的 Google Cloud 服务帐户或同等自定义角色
+* 安装 Trident 时，云提供商设置为 `GCP`并配置了云身份注释
+
+
+[role="tabbed-block"]
+====
+.Trident 操作员
+--
+要使用 Trident 操作员安装 Trident，请编辑 `tridentorchestrator_cr.yaml`：
+
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentOrchestrator
+metadata:
+  name: trident
+spec:
+  namespace: trident
+  cloudProvider: "GCP"
+  cloudIdentity: "iam.gke.io/gcp-service-account: cloudvolumes-admin-sa@mygcpproject.iam.gserviceaccount.com"
+----
+--
+.Helm
+--
+使用 Helm 安装 Trident 时设置云提供商和云标识：
+
+[listing]
+----
+helm install trident trident-operator-100.6.0.tgz \
+  --set cloudProvider=GCP \
+  --set cloudIdentity="iam.gke.io/gcp-service-account: cloudvolumes-admin-sa@mygcpproject.iam.gserviceaccount.com"
+----
+--
+.tridentctl
+--
+通过指定云提供商和云身份来安装 Trident：
+
+[listing]
+----
+tridentctl install \
+  --cloud-provider=GCP \
+  --cloud-identity="iam.gke.io/gcp-service-account: cloudvolumes-admin-sa@mygcpproject.iam.gserviceaccount.com" \
+  -n trident
+----
+--
+====
+
+
+[[configure-nas-storage]]
+[[nas]]
+== 配置 NAS 存储
+
+
+NOTE: 对于 Google Cloud NetApp Volumes UNIFIED 存储池，Trident 在卷操作期间应用 UNIFIED 特定的命名和验证规则。
+
+定位卷时，Trident 可以评估多个兼容的卷名变体（例如，连字符和下划线格式），以提高导入和发现的可靠性。
+
+
+
+[[driver-details]]
+=== 驱动程序详细信息
+
+Trident 提供  `google-cloud-netapp-volumes` 驱动程序，用于从 Google Cloud NetApp Volumes 配置 NAS 存储。
+
+驱动程序支持以下访问模式：
+
+* ReadWriteOnce（RWO）
+* ReadOnlyMany（ROX）
+* ReadWriteMany（RWX）
+* ReadWriteOncePod（RWOP）
+
+
+[cols="2,1,1,2,2"]
+|===
+| 驱动程序 | 协议 | volumeMode | 支持的访问模式 | 支持的文件系统 
+
+
+| `google-cloud-netapp-volumes`  a| 
+NFS SMB
+ a| 
+Filesystem
+ a| 
+RWO、ROX、RWX、RWOP
+ a| 
+`nfs`, `smb`
+
+|===
+
+
+[[configure-a-trident-nas-backend]]
+=== 配置 Trident NAS 后端
+
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentBackendConfig
+metadata:
+  name: gcnv-nas
+  namespace: trident
+spec:
+  version: 1
+  storageDriverName: google-cloud-netapp-volumes
+  projectNumber: "<project-number>"
+  location: "<region>"
+  sdkTimeout: "600"
+  storage:
+  - labels:
+      cloud: gcp
+    network: "<vpc-network>"
+----
+
+
+[[provision-nas-volumes]]
+=== 配置 NAS 卷
+
+NAS 卷使用 `google-cloud-netapp-volumes`后端进行调配，并支持 NFS 和 SMB 协议。
+
+
+
+==== StorageClass 适用于 NFS 卷
+
+要配置 NFS 卷，请将 `nasType`设置为 `nfs`。
+
+[source, yaml]
+----
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gcnv-nfs
+provisioner: csi.trident.netapp.io
+parameters:
+  backendType: "google-cloud-netapp-volumes"
+  trident.netapp.io/nasType: "nfs"
+allowVolumeExpansion: true
+----
+
+
+==== StorageClass 适用于 SMB 卷
+
+要配置 SMB 卷，请将 `nasType`设置为 `smb`并提供凭据。
+
+[source, yaml]
+----
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gcnv-smb
+provisioner: csi.trident.netapp.io
+parameters:
+  backendType: "google-cloud-netapp-volumes"
+  trident.netapp.io/nasType: "smb"
+  csi.storage.k8s.io/node-stage-secret-name: "smbcreds"
+  csi.storage.k8s.io/node-stage-secret-namespace: "default"
+allowVolumeExpansion: true
+----
+
+
+==== PersistentVolumeClaim 示例 (RWX)
+
+[source, yaml]
+----
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gcnv-nas-rwx
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: gcnv-nfs
+----
+
+
+==== PersistentVolumeClaim 示例 (RWO)
+
+[source, yaml]
+----
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gcnv-nas-rwo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: gcnv-nfs
+----
+
+NOTE: NAS 卷使用 `volumeMode: Filesystem`。

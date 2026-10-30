@@ -1,0 +1,35 @@
+= Data Mover 超时标记
+:allow-uri-read: 
+
+
+
+
+[[data-mover-timeout-annotation]]
+== Data Mover 超时标记
+
+在备份和还原操作期间，您可以使用注释 `protect.trident.netapp.io/data-mover-timeout-sec`来配置数据移动操作的超时。此注释指定数据移动器在超时之前应等待特定操作完成的最长时间（以秒为单位）。在网络问题或其他因素可能导致数据移动操作停止的情况下，它特别有用。它有助于检测和处理停滞的操作，而不是为整个过程设置一般超时。例如，如果由于网络问题而无法恢复卷数据，则操作将根据指定的持续时间超时。
+
+您可以在 YAML 文件中使用此注释，如下所示：
+
+[source, yaml]
+----
+---
+apiVersion: protect.trident.netapp.io/v1
+kind: BackupRestore
+metadata:
+  name: bkp-restore-kopia
+  namespace: trident-protect
+  annotations: # Optional annotations to configure data movement timeout
+    protect.trident.netapp.io/data-mover-timeout-sec: "2"
+spec:
+  appVaultRef: appvault-name
+  appArchivePath: my-backup-path
+  namespaceMapping: [{"source": "my-source-namespace", "destination": "my-destination-namespace"}]
+  storageClassMapping:
+    destination: "${destinationStorageClass}"
+    source: "${sourceStorageClass}"
+----
+在此示例中，如果还原操作在 2 秒内未发生任何进度，则注释将使 `BackupRestore`操作失败。
+
+
+NOTE: 如果批注值小于或等于 0，则操作将立即失败。

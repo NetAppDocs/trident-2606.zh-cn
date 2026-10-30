@@ -1,0 +1,22 @@
+---
+section: trident-managing-k8s
+title: 管理和监控 Trident
+entries:
+- title: 升级 Trident
+  entries:
+  - title: 升级概述
+    url: "/trident-managing-k8s/upgrade-trident.html"
+  - title: 使用 operator 进行升级
+    entries:
+    - title: 了解 operator 升级工作流程
+      url: "/trident-managing-k8s/upgrade-operator-overview.html"
+    - title: 使用 operator 进行升级
+      url: "/trident-managing-k8s/upgrade-operator.html"
+  - title: 使用 tridentctl 升级
+    url: "/trident-managing-k8s/upgrade-tridentctl.html"
+- title: 使用 tridentctl 管理 Trident
+  url: "/trident-managing-k8s/tridentctl.html"
+- title: 监控 Trident
+  url: "/trident-use/monitor-trident.html"
+- title: 卸载 Trident
+  url: "/trident-managing-k8s/uninstall-trident.html"

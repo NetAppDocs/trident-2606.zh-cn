@@ -1,0 +1,93 @@
+---
+sidebar: sidebar 
+permalink: trident-use/trident-aws-addon.html 
+keywords: Trident add-on, Trident EKS add-on, Trident AWS EKS add-on, integrate Trident, Trident 
+summary: 将 Trident EKS 插件添加到 Kubernetes 集群。 
+---
+= 在 EKS 集群上配置 Trident EKS 附加组件
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+NetApp Trident 简化了 Kubernetes 中 Amazon FSx for NetApp ONTAP 存储管理，使您的开发人员和管理员能够专注于应用程序部署。NetApp Trident EKS 加载项包含最新的安全补丁、错误修复，并经过 AWS 验证可与 Amazon EKS 配合使用。EKS 加载项使您能够始终如一地确保 Amazon EKS 集群的安全和稳定，并减少安装、配置和更新加载项所需的工作量。
+
+
+
+[[prerequisites]]
+== 前提条件
+
+在为 AWS EKS 配置 Trident 加载项之前，请确保具备以下条件：
+
+* 具有使用加载项权限的 Amazon EKS 群集帐户。请参阅 link:https://docs.aws.amazon.com/eks/latest/userguide/eks-add-ons.html["Amazon EKS 附加组件"^]。
+* AWS 对 AWS marketplace 的权限：
+`"aws-marketplace:ViewSubscriptions",
+"aws-marketplace:Subscribe",
+"aws-marketplace:Unsubscribe`
+* AMI 类型：Amazon Linux 2 (AL2_x86_64) 或 Amazon Linux 2 Arm(AL2_ARM_64)
+* 节点类型：AMD 或 ARM
+* 现有 Amazon FSx for NetApp ONTAP 文件系统
+
+
+
+
+[[steps]]
+== 步骤
+
+. 请确保创建 IAM 角色和 AWS 密钥，以使 EKS Pod 能够访问 AWS 资源。有关说明，请参见 link:../trident-use/trident-fsx-iam-role.html["创建 IAM 角色和 AWS Secret"^]。
+. 在 EKS Kubernetes 集群上，导航到 *Add-ons* 选项卡。
++
+image::../media/aws-eks-01.png[EKS 集群 Add-ons 选项卡]
+
+. 转到 *AWS Marketplace 加载项*并选择 _storage_ 类别。
++
+image::../media/aws-eks-02.png[AWS Marketplace 附加组件存储类别]
+
+. 找到 *NetApp Trident* 并选中 Trident 附加组件的复选框，然后单击 *Next*。
+. 选择所需的加载项版本。
++
+image::../media/aws-eks-03.png[Trident 附加组件版本选择]
+
+. 配置所需的附加组件设置。
++
+image::../media/aws-eks-04.png[Trident 附加组件配置设置]
+
+. 如果使用 IRSA（服务帐户的 IAM 角色），请参阅其他配置步骤link:https://docs.netapp.com/us-en/trident/trident-use/trident-fsx-install-trident.html#enable-the-trident-add-on-for-aws["此处"]。
+. 选择*创建*。
+. 验证加载项的状态是否为 _Active_。
++
+image::../media/aws-eks-05.png[Trident 附加组件活动状态]
+
+. 运行以下命令来验证集群上是否正确安装了 Trident：
++
+[listing]
+----
+kubectl get pods -n trident
+----
+. 继续设置并配置存储后端。有关信息，请参见 link:trident-fsx-storage-backend.html["配置存储后端"]。
+
+
+
+
+[[installuninstall-the-trident-eks-add-on-using-cli]]
+== 使用 CLI 安装/卸载 Trident EKS 附加组件
+
+.使用 CLI 安装 NetApp Trident EKS 附加组件：
+以下示例命令安装 Trident EKS 加载项：
+`eksctl create addon --cluster clusterName --name netapp_trident-operator --version v25.6.0-eksbuild.1`（带有专用版本）
+
+以下示例命令安装 Trident EKS 插件版本 25.6.1：
+`eksctl create addon --cluster clusterName --name netapp_trident-operator --version v25.6.1-eksbuild.1`（带有专用版本）
+
+以下示例命令安装 Trident EKS 插件版本 25.6.2：
+`eksctl create addon --cluster clusterName --name netapp_trident-operator --version v25.6.2-eksbuild.1`（带有专用版本）
+
+.使用 CLI 卸载 NetApp Trident EKS 附加组件：
+以下命令卸载 Trident EKS 加载项：
+
+[listing]
+----
+eksctl delete addon --cluster K8s-arm --name netapp_trident-operator
+----

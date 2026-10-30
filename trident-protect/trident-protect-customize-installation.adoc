@@ -1,0 +1,240 @@
+---
+sidebar: sidebar 
+permalink: trident-protect/trident-protect-customize-installation.html 
+keywords: customize, trident protect, resource limits, security context constraints, SCC, NetApp AutoSupport, proxy connection, helm, helm chart, helm upgrade 
+summary: 自定义 Trident Protect 的默认设置，以满足您的特定需求。 
+---
+= 自定义 Trident Protect 安装
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+您可以自定义 Trident Protect 的默认配置，以满足您环境的特定要求。
+
+
+
+[[specify-trident-protect-container-resource-limits]]
+== 指定 Trident Protect 容器资源限制
+
+安装 Trident Protect 后，您可以使用配置文件为 Trident Protect 容器指定资源限制。设置资源限制使您能够控制 Trident Protect 操作占用集群资源的数量。
+
+.步骤
+. 创建一个名为  `resourceLimits.yaml` 的文件。
+. 根据您的环境需求，使用 Trident Protect 容器的资源限制选项填充文件。
++
+以下配置文件示例显示了可用设置，并包含每个资源限制的默认值：
+
++
+[source, yaml]
+----
+---
+jobResources:
+  defaults:
+    limits:
+      cpu: 8000m
+      memory: 10000Mi
+      ephemeralStorage: ""
+    requests:
+      cpu: 100m
+      memory: 100Mi
+      ephemeralStorage: ""
+  resticVolumeBackup:
+    limits:
+      cpu: ""
+      memory: ""
+      ephemeralStorage: ""
+    requests:
+      cpu: ""
+      memory: ""
+      ephemeralStorage: ""
+  resticVolumeRestore:
+    limits:
+      cpu: ""
+      memory: ""
+      ephemeralStorage: ""
+    requests:
+      cpu: ""
+      memory: ""
+      ephemeralStorage: ""
+  kopiaVolumeBackup:
+    limits:
+      cpu: ""
+      memory: ""
+      ephemeralStorage: ""
+    requests:
+      cpu: ""
+      memory: ""
+      ephemeralStorage: ""
+  kopiaVolumeRestore:
+    limits:
+      cpu: ""
+      memory: ""
+      ephemeralStorage: ""
+    requests:
+      cpu: ""
+      memory: ""
+      ephemeralStorage: ""
+----
+. 应用  `resourceLimits.yaml` 文件中的值：
++
+[source, console]
+----
+helm upgrade trident-protect -n trident-protect netapp-trident-protect/trident-protect -f resourceLimits.yaml --reuse-values
+----
+
+
+
+
+[[customize-security-context-constraints]]
+== 自定义安全上下文约束
+
+安装 Trident Protect 后，您可以使用配置文件修改 Trident Protect 容器的 OpenShift 安全上下文约束 (SCC)。这些约束定义了 Red Hat OpenShift 集群中 Pod 的安全限制。
+
+.步骤
+. 创建一个名为  `sccconfig.yaml` 的文件。
+. 将 SCC 选项添加到文件中，并根据环境需要修改参数。
++
+以下示例显示了 SCC 选项的参数的默认值：
+
++
+[source, yaml]
+----
+scc:
+  create: true
+  name: trident-protect-job
+  priority: 1
+----
++
+下表描述了 SCC 选项的参数：
+
++
+|===
+| 参数 | 说明 | 默认 
+
+
+| create | 确定是否可以创建 SCC 资源。仅当  `scc.create` 设置为  `true` 且 Helm 安装过程识别 OpenShift 环境时，才会创建 SCC 资源。如果不在 OpenShift 上操作，或者如果  `scc.create` 设置为  `false`，则不会创建任何 SCC 资源。 | true 
+
+
+| name | 指定 SCC 的名称。 | trident-protect-job 
+
+
+| 优先级 | 定义 SCC 的优先级。优先级值较高的 SCC 在优先级值较低的 SCC 之前进行评估。 | 1 
+|===
+. 应用  `sccconfig.yaml` 文件中的值：
++
+[source, console]
+----
+helm upgrade trident-protect -n trident-protect netapp-trident-protect/trident-protect -f sccconfig.yaml --reuse-values
+----
++
+这将用  `sccconfig.yaml` 文件中指定的值替换默认值。
+
+
+
+
+
+[[configure-additional-trident-protect-helm-chart-settings]]
+== 配置其他 Trident Protect helm 图表设置
+
+您可以自定义 AutoSupport 设置、命名空间筛选和 OpenShift webhook 证书管理，以满足您的特定要求。下表描述了可用的配置参数：
+
+|===
+| 参数 | 类型 | 说明 
+
+
+| autoSupport.proxy | string | 为 NetApp AutoSupport 连接配置代理 URL。使用此选项可通过代理服务器路由支持包上传。示例： `http://my.proxy.url`。 
+
+
+| autoSupport.insecure | 布尔值 | 设置为 `true`时跳过 AutoSupport 代理连接的 TLS 验证。仅用于不安全的代理连接。（默认值： `false`） 
+
+
+| autoSupport.enabled | 布尔值 | 启用或禁用每日 Trident Protect AutoSupport 捆绑包上传。设置为 `false`时，计划的每日上传将被禁用，但您仍然可以手动生成支持捆绑包。（默认值： `true`） 
+
+
+| restoreSkipNamespaceAnnotations | string | 要从备份和还原操作中排除的命名空间注释的逗号分隔列表。允许您根据注释筛选命名空间。 
+
+
+| restoreSkipNamespaceLabels | string | 要从备份和还原操作中排除的命名空间标签的逗号分隔列表。允许您根据标签过滤命名空间。 
+
+
+| useOpenshiftServiceCA | 布尔值 | 启用与 OpenShift 的本地 Service CA Operator 的集成，以便为 Trident Protect 准入 webhook 自动创建和注入 TLS 证书。设置为 `true`时，Service CA Operator 会自动管理 webhook TLS 证书。仅在 OpenShift 集群上使用。（默认值： `false`） 
+|===
+您可以使用 YAML 配置文件或命令行标志配置这些选项：
+
+[role="tabbed-block"]
+====
+.使用 YAML 文件
+--
+.步骤
+. 创建配置文件并将其命名为  `values.yaml`。
+. 在创建的文件中，添加要自定义的配置选项。
++
+[source, console]
+----
+autoSupport:
+  enabled: false
+  proxy: http://my.proxy.url
+  insecure: true
+restoreSkipNamespaceAnnotations: "annotation1,annotation2"
+restoreSkipNamespaceLabels: "label1,label2"
+useOpenshiftServiceCA: true
+----
+. 使用正确的值填充  `values.yaml` 文件后，应用配置文件：
++
+[source, console]
+----
+helm upgrade trident-protect -n trident-protect netapp-trident-protect/trident-protect -f values.yaml --reuse-values
+----
+
+
+--
+.使用 CLI 标志
+--
+.步骤
+. 使用以下带有  `--set` 标志的命令指定单个参数：
++
+[source, console]
+----
+helm upgrade trident-protect -n trident-protect netapp-trident-protect/trident-protect \
+  --set autoSupport.enabled=false \
+  --set autoSupport.proxy=http://my.proxy.url \
+  --set-string restoreSkipNamespaceAnnotations="{annotation1,annotation2}" \
+  --set-string restoreSkipNamespaceLabels="{label1,label2}" \
+  --set useOpenshiftServiceCA=true \
+  --reuse-values
+----
+
+
+--
+====
+
+
+[[restrict-trident-protect-pods-to-specific-nodes]]
+== 将 Trident Protect Pod 限制到特定节点
+
+您可以使用 Kubernetes nodeSelector 节点选择约束来根据节点标签控制哪些节点有资格运行 Trident Protect Pod。默认情况下，Trident Protect 仅限于运行 Linux 的节点。您可以根据需要进一步自定义这些限制。
+
+.步骤
+. 创建一个名为  `nodeSelectorConfig.yaml` 的文件。
+. 将 nodeSelector 选项添加到文件中，并根据环境的需要修改文件以添加或更改节点标签以进行限制。例如，以下文件包含默认操作系统限制，但也针对特定区域和应用程序名称：
++
+[source, yaml]
+----
+nodeSelector:
+  kubernetes.io/os: linux
+  region: us-west
+  app.kubernetes.io/name: mysql
+----
+. 应用  `nodeSelectorConfig.yaml` 文件中的值：
++
+[source, console]
+----
+helm upgrade trident-protect -n trident-protect netapp-trident-protect/trident-protect -f nodeSelectorConfig.yaml --reuse-values
+----
++
+这会将默认限制替换为您在  `nodeSelectorConfig.yaml` 文件中指定的限制。
+
+

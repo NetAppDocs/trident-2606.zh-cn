@@ -1,0 +1,63 @@
+---
+sidebar: sidebar 
+permalink: trident-get-started/quickstart.html 
+keywords: kubernetes cluster, simple installation, Kubernetes installation 
+summary: 如果您刚刚开始使用 Kubernetes，请按照说明安装 Kubernetes 进行试用。这些说明提供了一个纯净的单节点集群，Trident 可以与之集成以进行演示。 
+---
+= Trident 快速入门
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+您可以通过几个步骤安装 Trident 并开始管理存储资源。在开始之前，请查看link:requirements.html["Trident 要求"]。
+
+
+NOTE: 对于 Docker，请参阅 link:../trident-docker/deploy-docker.html["适用于 Docker 的 Trident"]。
+
+.image:https://raw.githubusercontent.com/NetAppDocs/common/main/media/number-1.png["一个"] 准备 worker 节点
+[role="quick-margin-para"]
+Kubernetes 集群中的所有工作节点都必须能够装载您为 Pod 配置的卷。
+
+[role="quick-margin-para"]
+link:../trident-use/worker-node-prep.html["准备工作节点"]
+
+.image:https://raw.githubusercontent.com/NetAppDocs/common/main/media/number-2.png["两个"] 安装 Trident
+[role="quick-margin-para"]
+Trident 提供多种针对各种环境和组织进行优化的安装方法和模式。
+
+[role="quick-margin-para"]
+link:../trident-install/kubernetes-deploy.html["安装 Trident"]
+
+.image:https://raw.githubusercontent.com/NetAppDocs/common/main/media/number-3.png["三"] 创建后端
+[role="quick-margin-para"]
+后端定义 Trident 与存储系统之间的关系。它告诉 Trident 如何与该存储系统进行通信，以及 Trident 应如何从中配置卷。
+
+[role="quick-margin-para"]
+link:../trident-use/backends.html["配置后端"] 适用于您的存储系统
+
+.image:https://raw.githubusercontent.com/NetAppDocs/common/main/media/number-4.png["四个"] 创建 Kubernetes StorageClass
+[role="quick-margin-para"]
+Kubernetes StorageClass 对象将 Trident 指定为配置程序，并允许您创建存储类以配置具有可自定义属性的卷。Trident 为指定 Trident 配置程序的 Kubernetes 对象创建匹配的存储类。
+
+[role="quick-margin-para"]
+link:../trident-use/create-stor-class.html["创建存储类"]
+
+.image:https://raw.githubusercontent.com/NetAppDocs/common/main/media/number-5.png["五"] 预配卷
+[role="quick-margin-para"]
+_PersistentVolume_ (PV) 是由集群管理员在 Kubernetes 集群上配置的物理存储资源。_PersistentVolumeClaim_ (PVC) 是访问集群上 PersistentVolume 的请求。
+
+[role="quick-margin-para"]
+创建一个 PersistentVolume (PV) 和一个 PersistentVolumeClaim (PVC)，使用配置的 Kubernetes StorageClass 来请求对 PV 的访问。然后，您可以将 PV 挂载到 pod 上。
+
+[role="quick-margin-para"]
+link:../trident-use/vol-provision.html["预配卷"]
+
+
+
+[[whats-next]]
+== 下一步是什么？
+
+现在，您可以添加其他后端、管理存储类、管理后端和执行卷操作。

@@ -1,0 +1,25 @@
+---
+sidebar: sidebar 
+permalink: trident-use/backends.html 
+keywords: backends, storage system, anf, element, hci, solidfire, ontap, aff, fas, ontap select, configure backends, fsx 
+summary: 后端定义 Trident 与存储系统之间的关系。它告诉 Trident 如何与该存储系统进行通信，以及 Trident 应如何从中配置卷。 
+---
+= 配置 Trident 后端
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+后端定义 Trident 与存储系统之间的关系。它告诉 Trident 如何与该存储系统进行通信，以及 Trident 应如何从中配置卷。
+
+Trident 自动从后端提供与存储类定义的要求相匹配的存储池。了解如何为您的存储系统配置后端。
+
+* link:anf.html["配置 Azure NetApp Files 后端"^]
+* link:gcnv.html["配置 Google Cloud NetApp Volumes 后端"^]
+* link:element.html["配置 NetApp HCI 或 SolidFire 后端"^]
+* link:ontap-nas.html["使用 ONTAP 或 Cloud Volumes ONTAP NAS 驱动程序配置后端"^]
+* link:ontap-san.html["使用 ONTAP 或 Cloud Volumes ONTAP SAN 驱动程序配置后端"^]
+* link:trident-fsx.html["将 Trident 与 Amazon FSx for NetApp ONTAP 结合使用"^]
+

@@ -1,0 +1,29 @@
+---
+sidebar: sidebar 
+permalink: trident-concepts/snapshots.html 
+keywords: provisioning, Trident 
+summary: 详细了解 Trident 如何为其驱动程序创建卷快照。 
+---
+= Trident 卷快照创建
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+详细了解 Trident 如何为其驱动程序创建卷快照。
+
+
+
+[[learn-about-volume-snapshot-creation]]
+== 了解卷快照创建
+
+* 对于 `ontap-nas`、 `ontap-san`和 `azure-netapp-files`驱动程序，每个永久卷 (PV) 映射到一个 FlexVol 卷。因此，卷快照将创建为 NetApp 快照。NetApp 快照技术与竞争对手的快照技术相比，提供了更高的稳定性、可扩展性、可恢复性和性能。这些快照副本在创建所需的时间和存储空间方面都非常高效。
+* 对于 `ontap-nas-flexgroup`驱动程序，每个持久卷 (PV) 映射到 FlexGroup。因此，卷快照被创建为 NetApp FlexGroup 快照。NetApp 快照技术与竞争对手的快照技术相比，提供了更高的稳定性、可扩展性、可恢复性和性能。这些快照副本在创建所需的时间和存储空间方面都非常高效。
+* 对于 `ontap-san-economy`驱动程序，PV 映射到在共享 FlexVol 卷上创建的 LUN，PV 的 VolumeSnapshots 是通过执行关联 LUN 的 FlexClones 来实现的。ONTAP FlexClone 技术几乎可以即时创建最大数据集的副本。副本与其父级共享数据块，除了元数据所需的存储空间外，不占用任何存储空间。
+* 对于 `solidfire-san` 驱动程序，每个 PV 映射到在 NetApp Element 软件/NetApp HCI 群集上创建的 LUN。VolumeSnapshots 由底层 LUN 的 Element 快照表示。这些快照是时间点副本，仅占用少量系统资源和空间。
+* 使用  `ontap-nas` 和  `ontap-san` 驱动程序时，ONTAP 快照是 FlexVol 的时间点副本，占用 FlexVol 本身的空间。这可能会导致卷中的可写空间量随着快照的创建/计划而随时间减少。解决这个问题的一个简单方法是通过 Kubernetes 调整大小来增加卷。另一个选项是删除不再需要的快照。当通过 Kubernetes 创建的 VolumeSnapshot 被删除时，Trident 将删除关联的 ONTAP 快照。也可以删除不是通过 Kubernetes 创建的 ONTAP 快照。
+
+
+使用 Trident，您可以使用 VolumeSnapshots 从中创建新的 PV。从这些快照创建 PV 是通过对支持的 ONTAP 后端使用 FlexClone 技术来执行的。从快照创建 PV 时，后备卷是快照父卷的 FlexClone。 `solidfire-san` 驱动程序使用 Element 软件卷克隆从快照创建 PV。在这里，它从 Element 快照创建一个克隆。

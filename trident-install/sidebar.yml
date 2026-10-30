@@ -1,0 +1,30 @@
+---
+section: trident-install
+title: 安装 Trident
+entries:
+- title: 安装概述
+  url: "/trident-install/kubernetes-deploy.html"
+- title: 使用 Trident 操作员安装
+  entries:
+  - title: 手动部署 Trident 操作员（标准）
+    url: "/trident-install/kubernetes-deploy-operator.html"
+  - title: 手动部署 Trident 操作员（离线）
+    url: "/trident-install/kubernetes-deploy-operator-mirror.html"
+  - title: 使用 Trident Helm Chart（标准）
+    url: "/trident-install/kubernetes-deploy-helm.html"
+  - title: 使用 Trident Helm Chart（离线）
+    url: "/trident-install/kubernetes-deploy-helm-mirror.html"
+  - title: 定制 Trident 操作员安装
+    url: "/trident-install/kubernetes-customize-deploy.html"
+- title: 使用 tridentctl 安装
+  entries:
+  - title: 使用 tridentctl 安装
+    url: "/trident-install/kubernetes-deploy-tridentctl.html"
+  - title: 自定义 tridentctl 安装
+    url: "/trident-install/kubernetes-customize-deploy-tridentctl.html"
+- title: 使用 OpenShift 认证操作员安装
+  entries:
+  - title: 使用 OpenShift OperatorHub 安装 Trident
+    url: "/trident-install/openshift-operator-deploy.html"
+  - title: 切换至 OpenShift 认证 Trident 操作员
+    url: "/trident-install/openshift-certified-operator-deploy.html"

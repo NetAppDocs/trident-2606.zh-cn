@@ -1,0 +1,586 @@
+---
+sidebar: sidebar 
+permalink: trident-install/kubernetes-customize-deploy.html 
+keywords: deploy, trident, methods, operator, tridentctl, helm, attributes, customize, tridentorchestrator, smb, windows 
+summary: 'Trident 运算符允许您使用  `TridentOrchestrator` 规范中的属性自定义 Trident 的安装方式。' 
+---
+= 定制 Trident 操作员安装
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+Trident 操作员允许您使用 `TridentOrchestrator`规范中的属性自定义 Trident 安装。如果要自定义超出 `TridentOrchestrator`参数允许范围的安装，请考虑使用 `tridentctl`生成自定义 YAML 清单以根据需要进行修改。
+
+
+
+[[understanding-controller-pods-and-node-pods]]
+== 了解控制器 pod 和节点 pod
+
+Trident 作为单个控制器 pod 和集群中每个工作节点上的节点 pod 运行。节点 pod 必须运行在任何可能要装载 Trident 卷的主机上。
+
+Kubernetes link:https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/["节点选择器"^] 和 link:https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/["容忍和污点"^] 用于限制 pod 在特定或首选节点上运行。使用 `ControllerPlugin` 和  `NodePlugin`，您可以指定约束和覆盖。
+
+* 控制器插件处理卷配置和管理，例如快照和调整大小。
+* 节点插件处理将存储附加到节点。
+
+
+
+
+[[configuration-options]]
+== 配置选项
+
+
+WARNING: `spec.namespace` 在  `TridentOrchestrator` 中指定，以表示安装 Trident 的命名空间。此参数*在安装 Trident 后无法更新*。尝试执行此操作会导致  `TridentOrchestrator` 状态更改为  `Failed`。Trident 不能跨命名空间迁移。
+
+此表详细说明了  `TridentOrchestrator` 属性。
+
+[cols="1,2,1"]
+|===
+| 参数 | 说明 | 默认 
+
+
+| `namespace` | 安装 Trident 的命名空间 | `"default"` 
+
+
+| `debug` | 为 Trident 启用调试 | `false` 
+
+
+| `enableForceDetach` | `ontap-san`、 `ontap-san-economy`、 `ontap-nas` 和  `ontap-nas-economy` 仅适用。与 Kubernetes 非优雅节点关闭 (NGNS) 一起使用，使集群管理员能够在节点变得不健康时将带有装载卷的工作负载安全地迁移到新节点。有关信息，请参见 link:../trident-reco/force-detach.html["使用 Trident 自动化有状态应用程序的故障转移"]。 | `false` 
+
+
+| `windows` | 设置为  `true` 可在 Windows 工作节点上启用安装。 | `false` 
+
+
+| `cloudProvider`  a| 
+在 AKS 集群上使用托管标识或云标识时设置为 `"Azure"`。在 EKS 集群上使用云标识时设置为 `"AWS"`。在 GKE 集群上使用云标识时设置为 `"GCP"`。
+| `""` 
+
+
+| `cloudIdentity`  a| 
+在 AKS 集群上使用云标识时，设置为工作负载标识（"azure.workload.identity/client-id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxx"）。在 EKS 集群上使用云标识时，设置为 AWS IAM 角色（"'eks.amazonaws.com/role-arn: arn:aws:iam::123456:role/trident-role'"）。在 GKE 集群上使用云标识时，设置为云标识（"'iam.gke.io/gcp-service-account: xxxx@mygcpproject.iam.gserviceaccount.com'"）。
+| `""` 
+
+
+| `IPv6` | 通过 IPv6 安装 Trident | false 
+
+
+| `k8sTimeout`  a| 
+Kubernetes 操作超时。
+
+
+NOTE: 该 `k8sTimeout` 参数仅适用于 Trident 安装。
+| `180sec` 
+
+
+| `silenceAutosupport` | 不要将自动支持捆绑包自动发送到 NetApp | `false` 
+
+
+| `autosupportImage` | Autosupport Telemetry 的容器映像 | `"netapp/trident-autosupport10"` 
+
+
+| `autosupportProxy` | 用于发送 Autosupport 遥测的代理的地址/端口 | `"http://proxy.example.com:8888"` 
+
+
+| `uninstall` | 用于卸载 Trident 的标志 | `false` 
+
+
+| `logFormat` | 要使用的 Trident 日志记录格式 [text,json] | `"text"` 
+
+
+| `tridentImage` | 要安装的 Trident 镜像 | `"netapp/trident:26.06"` 
+
+
+| `imageRegistry` | 内部注册表的路径，格式为
+`<registry FQDN>[:port][/subpath]` | `"registry.k8s.io"` 
+
+
+| `kubeletDir` | 主机上的 kubelet 目录路径 | `"/var/lib/kubelet"` 
+
+
+| `wipeout` | 要删除的资源列表，以执行 Trident 的完全删除 |  
+
+
+| `imagePullSecrets` | 从内部注册表中提取镜像的密钥 |  
+
+
+| `imagePullPolicy` | 设置 Trident 操作员的镜像拉取策略。有效值为：
+`Always` 始终拉取镜像。
+`IfNotPresent` 仅在节点上不存在镜像时拉取镜像。
+`Never` 从不拉取镜像。 | `IfNotPresent` 
+
+
+| `controllerPluginNodeSelector` | Pod 的其他节点选择器。遵循与  `pod.spec.nodeSelector` 相同的格式。 | 无默认值；可选 
+
+
+| `controllerPluginTolerations` | 覆盖 Kubernetes 对 pod 的容忍。遵循与  `pod.spec.Tolerations` 相同的格式。 | 无默认值；可选 
+
+
+| `nodePluginNodeSelector` | Pod 的其他节点选择器。遵循与  `pod.spec.nodeSelector` 相同的格式。 | 无默认值；可选 
+
+
+| `nodePluginTolerations` | 覆盖 Kubernetes 对 pod 的容忍。遵循与  `pod.spec.Tolerations` 相同的格式。 | 无默认值；可选 
+
+
+| `nodePrep`  a| 
+使 Trident 能够准备 Kubernetes 集群的节点，以使用指定的数据存储协议管理卷。*目前， `iscsi` 是唯一受支持的值。*
+
+
+NOTE: 从 OpenShift 4.19 开始，此功能支持的最低 Trident 版本为 25.06.1。
+|  
+
+
+| `k8sAPIQPS`  a| 
+控制器在与 Kubernetes API 服务器通信时使用的每秒查询数 (QPS) 限制。Burst 值根据 QPS 值自动设置。
+| `100`；可选 
+
+
+| `enableConcurrency`  a| 
+启用并发 Trident 控制器操作，以提高吞吐量。有关支持的驱动程序的更多信息，请参见链接：https://docs.netapp.com/us-en/trident/trident-use/controller-scalability.html#controller-scalability[Controller Scalability documentation]。
+| `resources` 
+
+
+ a| 
+为 Trident 控制器和节点 pod 设置 Kubernetes 资源限制和请求。您可以为每个容器和 sidecar 配置 CPU 和内存，以管理 Kubernetes 中的资源分配。
+
+有关配置资源请求和限制的详细信息，请参阅 link:https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/["Pod 和容器的资源管理"^]。
+
+[WARNING]
+====
+* 请勿更改任何容器或字段的名称。
+* 请勿更改缩进 - YAML 缩进对于正确解析至关重要。
+
+
+====
+[NOTE]
+====
+* 默认情况下不会应用任何限制 - 只有请求具有默认值，如果未指定，则会自动应用。
+* 容器名称按 Pod 规格中显示的方式列出。
+* Sidecar 列在每个主容器下。
+* 检查 TORC 的 `status.CurrentInstallationParams`字段以查看当前应用的值。
+
+
+==== a| 
+[source, yaml]
+----
+resources:
+  controller:
+    trident-main:
+      requests:
+        cpu: 10m
+        memory: 80Mi
+      limits:
+          cpu:
+          memory:
+    csi-provisioner:
+      requests:
+        cpu: 2m
+        memory: 20Mi
+      limits:
+        cpu:
+        memory:
+    csi-attacher:
+      requests:
+        cpu: 2m
+        memory: 20Mi
+      limits:
+        cpu:
+        memory:
+    csi-resizer:
+      requests:
+        cpu: 3m
+        memory: 20Mi
+      limits:
+        cpu:
+        memory:
+    csi-snapshotter:
+      requests:
+        cpu: 2m
+        memory: 20Mi
+      limits:
+        cpu:
+        memory:
+    trident-autosupport:
+      requests:
+        cpu: 1m
+        memory: 30Mi
+      limits:
+        cpu:
+        memory:
+  node:
+    linux:
+      trident-main:
+        requests:
+          cpu: 10m
+          memory: 60Mi
+        limits:
+          cpu:
+          memory:
+      node-driver-registrar:
+        requests:
+          cpu: 1m
+          memory: 10Mi
+        limits:
+          cpu:
+          memory:
+    windows:
+      trident-main:
+        requests:
+          cpu: 6m
+          memory: 40Mi
+        limits:
+          cpu:
+          memory:
+      node-driver-registrar:
+        requests:
+          cpu: 6m
+          memory: 40Mi
+        limits:
+          cpu:
+          memory:
+      liveness-probe:
+        requests:
+          cpu: 2m
+          memory: 40Mi
+        limits:
+          cpu:
+          memory:
+----| `httpsMetrics` 
+
+
+| 为 Prometheus 指标端点启用 HTTPS。 | false | `hostNetwork` 
+|===
+
+NOTE: 有关格式化 pod 参数的更多信息，请参阅 link:https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/["将 Pod 分配给节点"^]。
+
+
+
+[[sample-configurations]]
+== 示例配置
+
+您可以在定义<<配置选项>>时使用 `TridentOrchestrator`中的属性来自定义您的安装。
+
+.基本自定义配置
+[%collapsible]
+====
+此示例在运行  `cat deploy/crds/tridentorchestrator_cr_imagepullsecrets.yaml` 命令后创建，表示一个基本的自定义安装：
+
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentOrchestrator
+metadata:
+  name: trident
+spec:
+  debug: true
+  namespace: trident
+  imagePullSecrets:
+  - thisisasecret
+----
+====
+.节点选择器
+[%collapsible]
+====
+此示例使用节点选择器安装 Trident。
+
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentOrchestrator
+metadata:
+  name: trident
+spec:
+  debug: true
+  namespace: trident
+  controllerPluginNodeSelector:
+    nodetype: master
+  nodePluginNodeSelector:
+    storage: netapp
+----
+====
+.Windows 工作节点
+[%collapsible]
+====
+此示例在运行 `cat deploy/crds/tridentorchestrator_cr.yaml`命令后创建，用于在 Windows 辅助节点上安装 Trident。
+
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentOrchestrator
+metadata:
+  name: trident
+spec:
+  debug: true
+  namespace: trident
+  windows: true
+----
+====
+.AKS 群集上的托管身份
+[%collapsible]
+====
+此示例安装 Trident 以在 AKS 集群上启用托管身份。
+
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentOrchestrator
+metadata:
+  name: trident
+spec:
+  debug: true
+  namespace: trident
+  cloudProvider: "Azure"
+----
+====
+.AKS 集群上的云身份
+[%collapsible]
+====
+此示例安装 Trident 以在 AKS 集群上与云标识一起使用。
+
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentOrchestrator
+metadata:
+  name: trident
+spec:
+  debug: true
+  namespace: trident
+  cloudProvider: "Azure"
+  cloudIdentity: 'azure.workload.identity/client-id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxx'
+
+----
+====
+.EKS 集群上的云身份
+[%collapsible]
+====
+此示例安装 Trident 以在 AKS 集群上与云标识一起使用。
+
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentOrchestrator
+metadata:
+  name: trident
+spec:
+  debug: true
+  namespace: trident
+  cloudProvider: "AWS"
+  cloudIdentity: "'eks.amazonaws.com/role-arn: arn:aws:iam::123456:role/trident-role'"
+----
+====
+.适用于 GKE 的云标识
+[%collapsible]
+====
+此示例安装 Trident 以便与 GKE 集群上的云身份一起使用。
+
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentBackendConfig
+metadata:
+  name: backend-tbc-gcp-gcnv
+spec:
+  version: 1
+  storageDriverName: google-cloud-netapp-volumes
+  projectNumber: '012345678901'
+  network: gcnv-network
+  location: us-west2
+  serviceLevel: Premium
+  storagePool: pool-premium1
+----
+====
+.Trident 控制器和 Trident Linux 节点 pod 的 Kubernetes 资源请求和限制配置
+[%collapsible]
+====
+此示例为 Trident 控制器和 Trident Linux 节点 pod 配置 Kubernetes 资源请求和限制。
+
+
+WARNING: *免责声明*：本示例中提供的请求和限制值仅用于演示目的。根据您的环境和工作负载要求调整这些值。
+
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentOrchestrator
+metadata:
+  name: trident
+spec:
+  debug: true
+  namespace: trident
+  imagePullSecrets:
+  - thisisasecret
+  resources:
+    controller:
+      trident-main:
+        requests:
+          cpu: 10m
+          memory: 80Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+      # sidecars
+      csi-provisioner:
+        requests:
+          cpu: 2m
+          memory: 20Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi
+      csi-attacher:
+        requests:
+          cpu: 2m
+          memory: 20Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi
+      csi-resizer:
+        requests:
+          cpu: 3m
+          memory: 20Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi
+      csi-snapshotter:
+        requests:
+          cpu: 2m
+          memory: 20Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi
+      trident-autosupport:
+        requests:
+          cpu: 1m
+          memory: 30Mi
+        limits:
+          cpu: 50m
+          memory: 128Mi
+    node:
+      linux:
+        trident-main:
+          requests:
+            cpu: 10m
+            memory: 60Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        # sidecars
+        node-driver-registrar:
+          requests:
+            cpu: 1m
+            memory: 10Mi
+          limits:
+            cpu: 50m
+            memory: 32Mi
+
+----
+====
+.Trident 控制器和 Trident Windows 和 Linux 节点 pod 的 Kubernetes 资源请求和限制配置
+[%collapsible]
+====
+此示例为 Trident 控制器和 Trident Windows 和 Linux 节点 pod 配置 Kubernetes 资源请求和限制。
+
+
+WARNING: *免责声明*：本示例中提供的请求和限制值仅用于演示目的。根据您的环境和工作负载要求调整这些值。
+
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentOrchestrator
+metadata:
+  name: trident
+spec:
+  debug: true
+  namespace: trident
+  imagePullSecrets:
+  - thisisasecret
+  windows: true
+  resources:
+    controller:
+      trident-main:
+        requests:
+          cpu: 10m
+          memory: 80Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+        # sidecars
+      csi-provisioner:
+        requests:
+          cpu: 2m
+          memory: 20Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi
+      csi-attacher:
+        requests:
+          cpu: 2m
+          memory: 20Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi
+      csi-resizer:
+        requests:
+          cpu: 3m
+          memory: 20Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi
+      csi-snapshotter:
+        requests:
+          cpu: 2m
+          memory: 20Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi
+      trident-autosupport:
+        requests:
+          cpu: 1m
+          memory: 30Mi
+        limits:
+          cpu: 50m
+          memory: 128Mi
+    node:
+      linux:
+        trident-main:
+          requests:
+            cpu: 10m
+            memory: 60Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        # sidecars
+        node-driver-registrar:
+          requests:
+            cpu: 1m
+            memory: 10Mi
+          limits:
+            cpu: 50m
+            memory: 32Mi
+      windows:
+        trident-main:
+          requests:
+            cpu: 6m
+            memory: 40Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        # sidecars
+        node-driver-registrar:
+          requests:
+            cpu: 6m
+            memory: 40Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+        liveness-probe:
+          requests:
+            cpu: 2m
+            memory: 40Mi
+          limits:
+            cpu: 50m
+            memory: 64Mi
+
+----
+====

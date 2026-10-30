@@ -1,0 +1,306 @@
+---
+sidebar: sidebar 
+permalink: trident-use/backend_options.html 
+keywords: backends, storage system, anf, element, hci, solidfire, ontap, aff, fas, ontap select, configure backends, kubectl, tridentctl, backend management options 
+summary: 了解在 Trident 中管理后端的不同方法。 
+---
+= 选择 Trident 后端管理方法
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+了解在 Trident 中管理后端的不同方法。
+
+
+
+[[options-for-managing-backends]]
+== 管理后端的选项
+
+随着  `TridentBackendConfig` 的推出，管理员现在有两种独特的后端管理方式。这就提出了以下问题：
+
+* 使用 `tridentctl`创建的后端可以通过 `TridentBackendConfig`进行管理吗？
+* 使用 `TridentBackendConfig`创建的后端可以通过 `tridentctl`进行管理吗？
+
+
+
+
+[[manage-tridentctl-backends-using-tridentbackendconfig]]
+== 使用 `tridentctl`管理后端 `TridentBackendConfig`
+
+本节介绍了管理通过  `tridentctl` 直接通过 Kubernetes 界面创建  `TridentBackendConfig` 对象而创建的后端所需的步骤。
+
+这适用于以下情形：
+
+* 已存在的后端，没有  `TridentBackendConfig`，因为它们是使用  `tridentctl` 创建的。
+* 已使用 `tridentctl`创建新后端，但存在其他 `TridentBackendConfig`对象。
+
+
+在这两种情况下，后端都将继续存在，Trident 调度卷并对其进行操作。管理员在此处有两种选择：
+
+* 继续使用  `tridentctl` 来管理使用它创建的后端。
+* 将使用 `tridentctl`创建的后端绑定到新的 `TridentBackendConfig`对象。这样做意味着后端将使用 `kubectl`而不是 `tridentctl`进行管理。
+
+
+要使用 `kubectl`管理预先存在的后端，您需要创建一个 `TridentBackendConfig`绑定到现有后端。以下是其工作原理概述：
+
+. 创建 Kubernetes Secret。密钥包含 Trident 与存储集群/服务通信所需的凭据。
+. 创建  `TridentBackendConfig` 对象。其中包含有关存储群集/服务的详细信息，并引用了上一步中创建的密码。必须注意指定相同的配置参数（如  `spec.backendName`、 `spec.storagePrefix`、 `spec.storageDriverName` 等）。 `spec.backendName` 必须设置为现有后端的名称。
+
+
+
+
+[[step-0-identify-the-backend]]
+=== 第 0 步：识别后端
+
+要创建绑定到现有后端的  `TridentBackendConfig`，您需要获取后端配置。在此示例中，假设后端是使用以下 JSON 定义创建的：
+
+[listing]
+----
+tridentctl get backend ontap-nas-backend -n trident
++---------------------+----------------+--------------------------------------+--------+---------+
+|          NAME       | STORAGE DRIVER |                 UUID                 | STATE  | VOLUMES |
++---------------------+----------------+--------------------------------------+--------+---------+
+| ontap-nas-backend   | ontap-nas      | 52f2eb10-e4c6-4160-99fc-96b3be5ab5d7 | online |      25 |
++---------------------+----------------+--------------------------------------+--------+---------+
+----
+[listing]
+----
+cat ontap-nas-backend.json
+----
+[source, json]
+----
+{
+  "version": 1,
+  "storageDriverName": "ontap-nas",
+  "managementLIF": "10.10.10.1",
+  "dataLIF": "10.10.10.2",
+  "backendName": "ontap-nas-backend",
+  "svm": "trident_svm",
+  "username": "cluster-admin",
+  "password": "admin-password",
+  "defaults": {
+    "spaceReserve": "none",
+    "encryption": "false"
+  },
+  "labels": {
+    "store": "nas_store"
+  },
+  "region": "us_east_1",
+  "storage": [
+    {
+      "labels": {
+        "app": "msoffice",
+        "cost": "100"
+      },
+      "zone": "us_east_1a",
+      "defaults": {
+        "spaceReserve": "volume",
+        "encryption": "true",
+        "unixPermissions": "0755"
+      }
+    },
+    {
+      "labels": {
+        "app": "mysqldb",
+        "cost": "25"
+      },
+      "zone": "us_east_1d",
+      "defaults": {
+        "spaceReserve": "volume",
+        "encryption": "false",
+        "unixPermissions": "0775"
+      }
+    }
+  ]
+}
+----
+
+
+[[step-1-create-a-kubernetes-secret]]
+=== 步骤 1：创建 Kubernetes Secret
+
+创建一个包含后端凭据的 Secret，如以下示例所示：
+
+[listing]
+----
+cat tbc-ontap-nas-backend-secret.yaml
+----
+[source, yaml]
+----
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ontap-nas-backend-secret
+type: Opaque
+stringData:
+  username: cluster-admin
+  password: admin-password
+----
+[listing]
+----
+kubectl create -f tbc-ontap-nas-backend-secret.yaml -n trident
+secret/backend-tbc-ontap-san-secret created
+----
+
+
+[[step-2-create-a-tridentbackendconfig-cr]]
+=== 步骤 2：创建  `TridentBackendConfig` CR
+
+下一步是创建一个 `TridentBackendConfig` CR，该 CR 将自动绑定到预先存在的 `ontap-nas-backend`（如本示例所示）。确保满足以下要求：
+
+* 在 `spec.backendName`中定义了相同的后端名称。
+* 配置参数与原始后端相同。
+* 虚拟池（如果存在）必须保持与原始后端相同的顺序。
+* 凭据通过 Kubernetes Secret 提供，而不是以纯文本形式提供。
+
+
+在此情况下， `TridentBackendConfig` 将如下所示：
+
+[listing]
+----
+cat backend-tbc-ontap-nas.yaml
+----
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentBackendConfig
+metadata:
+  name: tbc-ontap-nas-backend
+spec:
+  version: 1
+  storageDriverName: ontap-nas
+  managementLIF: 10.10.10.1
+  dataLIF: 10.10.10.2
+  backendName: ontap-nas-backend
+  svm: trident_svm
+  credentials:
+    name: mysecret
+  defaults:
+    spaceReserve: none
+    encryption: 'false'
+  labels:
+    store: nas_store
+  region: us_east_1
+  storage:
+  - labels:
+      app: msoffice
+      cost: '100'
+    zone: us_east_1a
+    defaults:
+      spaceReserve: volume
+      encryption: 'true'
+      unixPermissions: '0755'
+  - labels:
+      app: mysqldb
+      cost: '25'
+    zone: us_east_1d
+    defaults:
+      spaceReserve: volume
+      encryption: 'false'
+      unixPermissions: '0775'
+----
+[listing]
+----
+kubectl create -f backend-tbc-ontap-nas.yaml -n trident
+tridentbackendconfig.trident.netapp.io/tbc-ontap-nas-backend created
+----
+
+
+[[step-3-verify-the-status-of-the-tridentbackendconfig-cr]]
+=== 第 3 步：验证  `TridentBackendConfig` CR 的状态
+
+创建 `TridentBackendConfig` 后，其阶段必须为 `Bound`。它还应反映与现有后端相同的后端名称和 UUID。
+
+[listing]
+----
+kubectl get tbc tbc-ontap-nas-backend -n trident
+NAME                   BACKEND NAME          BACKEND UUID                           PHASE   STATUS
+tbc-ontap-nas-backend  ontap-nas-backend     52f2eb10-e4c6-4160-99fc-96b3be5ab5d7   Bound   Success
+
+#confirm that no new backends were created (i.e., TridentBackendConfig did not end up creating a new backend)
+tridentctl get backend -n trident
++---------------------+----------------+--------------------------------------+--------+---------+
+|          NAME       | STORAGE DRIVER |                 UUID                 | STATE  | VOLUMES |
++---------------------+----------------+--------------------------------------+--------+---------+
+| ontap-nas-backend   | ontap-nas      | 52f2eb10-e4c6-4160-99fc-96b3be5ab5d7 | online |      25 |
++---------------------+----------------+--------------------------------------+--------+---------+
+----
+现在，将使用  `tbc-ontap-nas-backend` `TridentBackendConfig` 对象来完全管理后端。
+
+
+
+[[manage-tridentbackendconfig-backends-using-tridentctl]]
+== 使用 `TridentBackendConfig`管理后端 `tridentctl`
+
+ `tridentctl` 可用于列出使用  `TridentBackendConfig` 创建的后端。此外，管理员还可以选择通过  `tridentctl` 完全管理此类后端，方法是删除  `TridentBackendConfig` 并确保将  `spec.deletionPolicy` 设置为  `retain`。
+
+
+
+[[step-0-identify-the-backend]]
+=== 第 0 步：识别后端
+
+例如，让我们假设以下后端是使用  `TridentBackendConfig` 创建的：
+
+[listing]
+----
+kubectl get tbc backend-tbc-ontap-san -n trident -o wide
+NAME                    BACKEND NAME        BACKEND UUID                           PHASE   STATUS    STORAGE DRIVER   DELETION POLICY
+backend-tbc-ontap-san   ontap-san-backend   81abcb27-ea63-49bb-b606-0a5315ac5f82   Bound   Success   ontap-san        delete
+
+tridentctl get backend ontap-san-backend -n trident
++-------------------+----------------+--------------------------------------+--------+---------+
+|       NAME        | STORAGE DRIVER |                 UUID                 | STATE  | VOLUMES |
++-------------------+----------------+--------------------------------------+--------+---------+
+| ontap-san-backend | ontap-san      | 81abcb27-ea63-49bb-b606-0a5315ac5f82 | online |      33 |
++-------------------+----------------+--------------------------------------+--------+---------+
+----
+从输出中可以看出， `TridentBackendConfig` 已成功创建并绑定到后端 [观察后端的 UUID]。
+
+
+
+[[step-1-confirm-deletionpolicy-is-set-to-retain]]
+=== 步骤 1：确认  `deletionPolicy` 设置为  `retain`
+
+让我们来看看  `deletionPolicy` 的价值。这需要设置为  `retain`。这可以确保在删除  `TridentBackendConfig` CR 时，后端定义仍然存在，并且可以使用  `tridentctl` 进行管理。
+
+[listing]
+----
+kubectl get tbc backend-tbc-ontap-san -n trident -o wide
+NAME                    BACKEND NAME        BACKEND UUID                           PHASE   STATUS    STORAGE DRIVER   DELETION POLICY
+backend-tbc-ontap-san   ontap-san-backend   81abcb27-ea63-49bb-b606-0a5315ac5f82   Bound   Success   ontap-san        delete
+
+# Patch value of deletionPolicy to retain
+kubectl patch tbc backend-tbc-ontap-san --type=merge -p '{"spec":{"deletionPolicy":"retain"}}' -n trident
+tridentbackendconfig.trident.netapp.io/backend-tbc-ontap-san patched
+
+#Confirm the value of deletionPolicy
+kubectl get tbc backend-tbc-ontap-san -n trident -o wide
+NAME                    BACKEND NAME        BACKEND UUID                           PHASE   STATUS    STORAGE DRIVER   DELETION POLICY
+backend-tbc-ontap-san   ontap-san-backend   81abcb27-ea63-49bb-b606-0a5315ac5f82   Bound   Success   ontap-san        retain
+----
+
+NOTE: 除非 `deletionPolicy`设置为 `retain`，否则请勿继续下一步。
+
+
+
+[[step-2-delete-the-tridentbackendconfig-cr]]
+=== 步骤 2：删除  `TridentBackendConfig` CR
+
+最后一步是删除 `TridentBackendConfig` CR。确认 `deletionPolicy`设置为 `retain`后，您可以继续删除：
+
+[listing]
+----
+kubectl delete tbc backend-tbc-ontap-san -n trident
+tridentbackendconfig.trident.netapp.io "backend-tbc-ontap-san" deleted
+
+tridentctl get backend ontap-san-backend -n trident
++-------------------+----------------+--------------------------------------+--------+---------+
+|       NAME        | STORAGE DRIVER |                 UUID                 | STATE  | VOLUMES |
++-------------------+----------------+--------------------------------------+--------+---------+
+| ontap-san-backend | ontap-san      | 81abcb27-ea63-49bb-b606-0a5315ac5f82 | online |      33 |
++-------------------+----------------+--------------------------------------+--------+---------+
+----
+删除 `TridentBackendConfig` 对象后，Trident 只需将其删除，而不会实际删除后端本身。

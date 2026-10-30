@@ -1,0 +1,225 @@
+---
+sidebar: sidebar 
+permalink: trident-protect/trident-protect-manage-applications.html 
+keywords: appvault, data protection, custom resource, namespace, application, cluster 
+summary: 您可以通过创建应用程序 CR 和关联的 AppVault CR，使 Trident Protect 知道您要管理的应用程序。 
+---
+= 使用 Trident Protect 定义管理应用程序
+:hardbreaks:
+:allow-uri-read: 
+:nofooter: 
+:icons: font
+:linkattrs: 
+:imagesdir: ../media/
+
+
+[role="lead"]
+您可以通过创建应用程序 CR 和相关 AppVault CR 来定义要使用 Trident Protect 管理的应用程序。
+
+
+
+[[create-an-appvault-cr]]
+== 创建 AppVault CR
+
+您需要创建将在对应用程序执行数据保护操作时使用的 AppVault CR，并且 AppVault CR 需要驻留在安装 Trident Protect 的集群上。AppVault CR 特定于您的环境；有关 AppVault CR 的示例，请参阅 link:trident-protect-appvault-custom-resources.html["AppVault 自定义资源。"]
+
+
+
+[[define-an-application]]
+== 定义应用程序
+
+您需要定义要使用 Trident Protect 管理的每个应用程序。您可以通过手动创建应用程序 CR 或使用 Trident Protect CLI 来定义用于管理的应用程序。
+
+
+NOTE: 要定义通过名称而不是整个命名空间来保护特定 KubeVirt 虚拟机 (VM) 的 VM 范围应用程序，请使用应用程序 CR 中的 `spec.includedVirtualMachines`字段或 CLI 中的 `--virtual-machines`标志。有关详细信息、字段参考和 YAML 示例，请参阅 link:trident-protect-kubevirt-vms.html["使用 Trident Protect 保护 KubeVirt 虚拟机"]。
+
+[role="tabbed-block"]
+====
+.使用 CR 添加应用程序
+--
+.步骤
+. 创建目标应用程序 CR 文件：
++
+.. 创建自定义资源 (CR) 文件并将其命名（例如， `maria-app.yaml`）。
+.. 配置以下属性：
++
+*** *metadata.name*：（_必需_）应用程序自定义资源的名称。请注意您选择的名称，因为保护操作所需的其他 CR 文件会引用此值。
+*** *spec.includedNamespaces*: (_Required_) 使用命名空间和标签选择器指定应用程序使用的命名空间和资源。应用程序命名空间必须是此列表的一部分。标签选择器是可选的，可用于筛选每个指定命名空间内的资源。
+*** *spec.includedClusterScopedResources*: (_Optional_) 使用此属性指定要包含在应用程序定义中的群集范围的资源。此属性允许您根据其组、版本、种类和标签选择这些资源。
++
+**** *groupVersionKind*：（_必需_）指定集群范围内资源的 API 组、版本和种类。
+**** *labelSelector*：（_可选_）根据集群范围资源的标签对其进行筛选。
+
+
+*** *metadata.annotations.protect.trident.netapp.io/skip-vm-freeze*：（_Optional_）此注释仅适用于从虚拟机定义的应用程序，例如在 KubeVirt 环境中，在快照之前会发生文件系统冻结。指定此应用程序是否可以在快照期间写入文件系统。如果设置为 true，应用程序将忽略全局设置，并且可以在快照期间写入文件系统。如果设置为 false，应用程序将忽略全局设置，并在快照期间冻结文件系统。如果指定，但应用程序在应用程序定义中没有虚拟机，则忽略注释。如果未指定，则应用程序遵循 link:trident-protect-requirements.html#protecting-data-with-kubevirt-vms["全局 Trident Protect 冻结设置"]。
++
+[NOTE]
+====
+如果需要在已创建应用程序后应用此批注，可以使用以下命令：
+
+[source, console]
+----
+kubectl annotate application -n <application CR namespace> <application CR name> protect.trident.netapp.io/skip-vm-freeze="true"
+----
+====
++
+示例 YAML：
+
++
+[source, yaml]
+----
+apiVersion: protect.trident.netapp.io/v1
+kind: Application
+metadata:
+  annotations:
+    protect.trident.netapp.io/skip-vm-freeze: "false"
+  name: my-app-name
+  namespace: my-app-namespace
+spec:
+  includedNamespaces:
+    - namespace: namespace-1
+      labelSelector:
+        matchLabels:
+          app: example-app
+    - namespace: namespace-2
+      labelSelector:
+        matchLabels:
+          app: another-example-app
+  includedClusterScopedResources:
+    - groupVersionKind:
+        group: rbac.authorization.k8s.io
+        kind: ClusterRole
+        version: v1
+      labelSelector:
+        matchLabels:
+          mylabel: test
+
+----
+
+
+
+
+. （_Optional_）如果需要，可以将资源筛选添加到同一 CR 以包括或排除特定资源：
++
+** *通用过滤器示例：*
++
+*** *resourceFilter.resourceSelectionCriteria*：（筛选时需要）使用 `Include`或 `Exclude`来包含或排除在 resourceMatchers 中定义的资源。添加以下 resourceMatchers 参数以定义要包括或排除的资源：
++
+**** *resourceFilter.resourceMatchers*：resourceMatcher 对象数组。如果在此数组中定义多个元素，则它们将作为 OR 操作匹配，并且每个元素（group、kind、version）内的字段将作为 AND 操作匹配。
+**** *resourceMatchers[].group*：（_Optional_）要筛选的资源的组。
+**** *resourceMatchers[].kind*：（_Optional_）要筛选的资源的类型。
+**** *resourceMatchers[].version*：（_Optional_）要筛选的资源的版本。
+**** *resourceMatchers[].names*：（_可选_）要过滤的资源的 Kubernetes metadata.name 字段中的名称。
+**** *resourceMatchers[].namespaces*: (_Optional_) 要过滤的资源的 Kubernetes metadata.name 字段中的命名空间。
+**** *resourceMatchers[].labelSelectors*: (_Optional_) 资源的 Kubernetes metadata.name 字段中的标签选择器字符串，如  https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors["Kubernetes 文档"^] 中所定义。例如： `"trident.netapp.io/os=linux"`。
++
+
+NOTE: 当同时使用 `resourceFilter`和 `labelSelector`时， `resourceFilter`首先运行，然后将 `labelSelector`应用于生成的资源。
+
++
+例如：
+
++
+[source, yaml]
+----
+spec:
+  resourceFilter:
+    resourceSelectionCriteria: "Include"
+    resourceMatchers:
+      - group: my-resource-group-1
+        kind: my-resource-kind-1
+        version: my-resource-version-1
+        names: ["my-resource-names"]
+        namespaces: ["my-resource-namespaces"]
+        labelSelectors: ["trident.netapp.io/os=linux"]
+      - group: my-resource-group-2
+        kind: my-resource-kind-2
+        version: my-resource-version-2
+        names: ["my-resource-names"]
+        namespaces: ["my-resource-namespaces"]
+        labelSelectors: ["trident.netapp.io/os=linux"]
+----
+
+
+
+
+** *仅 PVC 过滤器示例：*
++
+要定义仅限 PVC 的应用程序，还必须在资源筛选器中包含 `PersistentVolume`和 `VolumeSnapshotClass`。快照和备份操作依赖于 `PersistentVolume`（绑定到每个 PVC 的集群范围卷）和 `VolumeSnapshotClass`（快照驱动程序），如果没有它们，则会失败。例如：
+
++
+[source, yaml]
+----
+apiVersion: protect.trident.netapp.io/v1
+kind: Application
+metadata:
+  name: my-pvc-app
+  namespace: my-app-namespace
+spec:
+  includedNamespaces:
+  - namespace: my-app-namespace
+  resourceFilter:
+    resourceMatchers:
+    - kind: PersistentVolumeClaim
+      version: v1
+    - kind: PersistentVolume
+      version: v1
+    - kind: VolumeSnapshotClass
+      version: v1
+    resourceSelectionCriteria: Include
+----
+
+
+. 创建与环境匹配的应用程序 CR 后，应用 CR。例如：
++
+[source, console]
+----
+kubectl apply -f maria-app.yaml
+----
+
+
+--
+.使用 CLI 添加应用程序
+--
+.步骤
+. 使用以下示例之一创建并应用应用程序定义，使用环境中的信息替换括号中的值。可以使用逗号分隔的列表和示例中显示的参数在应用程序定义中包含命名空间和资源。
+
+
+在创建应用程序时，您可以选择使用注释来指定应用程序是否可以在快照期间写入文件系统。这仅适用于从虚拟机定义的应用程序，例如在 KubeVirt 环境中，在快照之前会发生文件系统冻结。如果将注释设置为 `true`，应用程序将忽略全局设置，并且可以在快照期间写入文件系统。如果将其设置为 `false`，应用程序将忽略全局设置，并在快照期间冻结文件系统。如果使用注释，但应用程序在应用程序定义中没有虚拟机，则该注释将被忽略。如果不使用注释，应用程序将遵循link:trident-protect-requirements.html#protecting-data-with-kubevirt-vms["全局 Trident Protect 冻结设置"]。
+
++ 使用 CLI 创建应用程序时，可以使用 `--annotation`标志指定注释。
+
++ * 创建应用程序并使用文件系统冻结行为的全局设置：
+
++
+
+[source, console]
+----
+tridentctl-protect create application <my_new_app_cr_name> --namespaces <namespaces_to_include> --csr <cluster_scoped_resources_to_include> --namespace <my-app-namespace>
+----
++ * 创建应用程序并配置文件系统冻结行为的本地应用程序设置：
+
++
+
+[source, console]
+----
+tridentctl-protect create application <my_new_app_cr_name> --namespaces <namespaces_to_include> --csr <cluster_scoped_resources_to_include> --namespace <my-app-namespace> --annotation protect.trident.netapp.io/skip-vm-freeze=<"true"|"false">
+----
++ * 可以使用 `--resource-filter-include`和 `--resource-filter-exclude`标志根据 `resourceSelectionCriteria`（例如组、种类、版本、标签、名称和命名空间）来包含或排除资源，如以下示例所示：
+
++
+
+[source, console]
+----
+tridentctl-protect create application <my_new_app_cr_name> --namespaces <namespaces_to_include> --csr <cluster_scoped_resources_to_include> --namespace <my-app-namespace> --resource-filter-include '[{"Group":"apps","Kind":"Deployment","Version":"v1","Names":["my-deployment"],"Namespaces":["my-namespace"],"LabelSelectors":["app=my-app"]}]'
+----
++ *要定义仅限 PVC 的应用程序，您还必须在资源筛选器中包含 `PersistentVolume`和 `VolumeSnapshotClass``。快照和备份操作依赖于 `PersistentVolume`（绑定到每个 PVC 的集群范围卷）和 `VolumeSnapshotClass`（快照驱动程序），如果没有它们，则会失败。例如：
+
++
+
+[source, console]
+----
+tridentctl-protect create app my-pvc-app --namespaces <my-app-namespace> --resource-filter-include '[{"Kind":"PersistentVolumeClaim","Version":"v1"},{"Kind":"PersistentVolume","Version":"v1"},{"Kind":"VolumeSnapshotClass","Version":"v1"}]' -n <my-app-namespace>
+----
+--
+====

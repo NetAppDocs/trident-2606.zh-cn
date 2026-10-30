@@ -1,0 +1,40 @@
+---
+sidebar: sidebar 
+permalink: known-issues.html 
+keywords: 'what"s new, new features, enhancements, known issues, resolved issues, troubleshooting' 
+summary: 以下是此版本的已知问题。 
+---
+= 已知问题
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ./media/
+
+
+[role="lead"]
+已知问题可识别可能妨碍您成功使用此版本产品的问题。
+
+以下已知问题影响当前版本：
+
+
+
+[[volumesnapshots-not-reaching-readytouse-state]]
+== VolumeSnapshots 未到达 ReadyToUse 状态
+
+[WARNING]
+====
+ `csi-snapshotter` sidecar 存在已知问题。在所有 Kubernetes 版本中，VolumeGroupSnapshots `v1beta1` 阻止 VolumeSnapshots 到达 `ReadyToUse`状态。
+
+====
+有两种解决方法可供选择：
+
+. 删除 VolumeGroupSnapshots CRD 以禁用 VolumeGroupSnapshots，然后重新安装 Trident。
+. 安装 VolumeGroupSnapshots `v1beta2` 和 `snapshot-controller` 版本 8.4.0 或更高版本，然后重新安装 Trident。VolumeGroupSnapshots 在 v1.34 之前的 Kubernetes 版本上不起作用。
+
+
+
+
+[[restoring-restic-backups-of-large-files-can-fail]]
+== 恢复大型文件的 Restic 备份可能会失败
+
+从使用 Restic 创建的 Amazon S3 备份还原 30GB 或更大的文件时，还原操作可能会失败。作为一种解决方法，使用 Kopia 作为数据移动器来备份数据（Kopia 是备份的默认数据移动器）。请参阅 https://docs.netapp.com/us-en/trident/trident-protect/trident-protect-protect-apps.html["使用 Trident Protect 保护应用程序"^]了解相关说明。

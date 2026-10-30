@@ -1,0 +1,26 @@
+---
+sidebar: sidebar 
+permalink: trident-protect/learn-about-trident-protect.html 
+keywords: overview, concepts, features, use case, workloads, how workload factory works 
+summary: Trident Protect 使您能够使用 Trident 保护您的应用程序和应用程序数据。 
+---
+= 了解 Trident Protect
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+NetApp Trident Protect 提供高级应用程序数据管理功能，可增强由 NetApp ONTAP 存储系统和 NetApp Trident CSI 存储配置程序支持的有状态 Kubernetes 应用程序的功能和可用性。Trident Protect 简化了跨公共云和本地环境的容器化工作负载的管理、保护和移动。它还通过其 API 和 CLI 提供自动化功能。
+
+您可以通过创建自定义资源 (CR) 或使用 Trident Protect CLI，使用 Trident Protect 保护应用程序。
+
+
+
+[[whats-next]]
+== 下一步是什么？
+
+在安装之前，您可以了解 Trident Protect 的要求：
+
+* link:trident-protect-requirements.html["Trident Protect 要求"]
+

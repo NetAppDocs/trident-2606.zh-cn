@@ -1,0 +1,105 @@
+---
+sidebar: sidebar 
+permalink: trident-managing-k8s/uninstall-trident.html 
+keywords: uninstall, Trident, methods, operator, tridentctl, helm, downgrade, obliviate, crds, wipeout, downgrade 
+summary: 您应该使用与安装 Trident 相同的方法来卸载 Trident。如果您需要修复升级后发现的错误、依赖问题或升级不成功或未完成的错误，则应卸载 Trident 并使用该版本的特定说明重新安装早期版本。 
+---
+= 卸载 Trident
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+您应该使用与安装 Trident 相同的方法来卸载 Trident。
+
+.关于此任务
+* 如果您需要修复升级后发现的错误、依赖问题或未成功或未完成的升级，则应卸载 Trident 并使用特定说明重新安装早期版本link:../earlier-versions.html["version"]。这是_降级_到早期版本的唯一建议方法。
+* 为了便于升级和重新安装，卸载 Trident 不会删除由 Trident 创建的 CRD 或相关对象。如果需要完全删除 Trident 及其所有数据，请参阅 link:../troubleshooting.html#completely-remove-trident-and-crds["完全移除 Trident 和 CRD"]。
+
+
+.开始之前
+如果要停用 Kubernetes 集群，则必须在卸载之前删除所有使用 Trident 创建的卷的应用程序。这可确保 PVC 在删除之前未在 Kubernetes 节点上发布。
+
+
+
+[[determine-the-original-installation-method]]
+== 确定原始安装方法
+
+您应该使用与安装 Trident 时相同的方法来卸载 Trident。在卸载之前，请验证您最初用于安装 Trident 的版本。
+
+. 使用  `kubectl get pods -n trident` 检查 pod。
++
+** 如果没有操作员舱，则说明 Trident 是使用  `tridentctl` 安装的。
+** 如果有 operator pod，Trident 是使用 Trident operator 手动或使用 Helm 安装的。
+
+
+. 如果有操作员 pod，请使用  `kubectl describe tproc trident` 来确定是否使用 Helm 安装了 Trident。
++
+** 如果有 Helm 标签，则说明 Trident 是使用 Helm 安装的。
+** 如果没有 Helm 标签，则使用 Trident 操作员手动安装 Trident。
+
+
+
+
+
+
+[[uninstall-a-trident-operator-installation]]
+== 卸载 Trident 操作员安装
+
+您可以手动或使用 Helm 卸载 Trident 操作员安装。
+
+
+
+[[uninstall-manual-installation]]
+=== 卸载手动安装
+
+如果您使用操作员安装了 Trident，可以通过执行以下操作之一来卸载它：
+
+. **编辑 `TridentOrchestrator` CR 并设置卸载标志**：
++
+[listing]
+----
+kubectl patch torc <trident-orchestrator-name> --type=merge -p '{"spec":{"uninstall":true}}'
+----
++
+当 `uninstall`标志设置为 `true`时，Trident 操作员卸载 Trident，但不删除 TridentOrchestrator 自身。如果要再次安装 Trident，您应该清理 TridentOrchestrator 并创建一个新的。
+
+. **删除 `TridentOrchestrator`**：通过删除用于部署 Trident 的 `TridentOrchestrator` CR，您指示操作员卸载 Trident。操作员处理 `TridentOrchestrator`的删除并继续删除 Trident 部署和守护程序集，删除在安装过程中创建的 Trident pod。
++
+[listing]
+----
+kubectl delete -f deploy/<bundle.yaml> -n <namespace>
+----
+
+
+
+
+[[uninstall-helm-installation]]
+=== 卸载 Helm 安装
+
+如果您使用 Helm 安装了 Trident ，可以使用 `helm uninstall`将其卸载。
+
+[listing]
+----
+#List the Helm release corresponding to the Trident install.
+helm ls -n trident
+NAME          NAMESPACE       REVISION        UPDATED                                 STATUS          CHART                           APP VERSION
+trident       trident         1               2021-04-20 00:26:42.417764794 +0000 UTC deployed        trident-operator-21.07.1        21.07.1
+
+#Uninstall Helm release to remove Trident
+helm uninstall trident -n trident
+release "trident" uninstalled
+----
+
+
+[[uninstall-a-tridentctl-installation]]
+== 卸载  `tridentctl` 安装
+
+使用  `uninstall` 命令在  `tridentctl` 中删除与 Trident 关联的所有资源，但 CRD 和相关对象除外：
+
+[listing]
+----
+./tridentctl uninstall -n <namespace>
+----

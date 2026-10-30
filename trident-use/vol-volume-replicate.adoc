@@ -1,0 +1,352 @@
+---
+sidebar: sidebar 
+permalink: trident-use/vol-volume-replicate.html 
+keywords: snapmirror update, volume replication, TridentMirrorRelationship, TridentActionMirrorUpdate 
+summary: Trident 支持在源卷和目标卷之间创建镜像关系，以复制卷进行灾难恢复。 
+---
+= 使用 SnapMirror 复制卷
+:allow-uri-read: 
+
+
+[role="lead"]
+Trident 支持一个集群上的源卷与对等集群上的目标卷之间的镜像关系，用于复制数据以进行灾难恢复。  您可以使用命名空间的自定义资源定义 (CRD)，称为 Trident Mirror Relationship (TMR) 来执行以下操作：
+
+* 创建卷 (PVC) 之间的镜像关系
+* 删除卷之间的镜像关系
+* 中断镜像关系
+* 在灾难情况（故障转移）期间提升辅助卷
+* 执行应用程序从集群到集群的无损转换（在计划的故障转移或迁移期间）
+
+
+
+
+[[replication-prerequisites]]
+== 复制先决条件
+
+在开始之前，请确保满足以下先决条件：
+
+.ONTAP 集群
+* *Trident*：Trident 版本 22.10 或更高版本必须存在于使用 ONTAP 作为后端的源和目标 Kubernetes 集群上。
+* *许可证*：必须在源和目标 ONTAP 集群上启用使用数据保护捆绑包的 ONTAP SnapMirror 异步许可证。请参阅  https://docs.netapp.com/us-en/ontap/data-protection/snapmirror-licensing-concept.html["ONTAP 中的 SnapMirror 许可概述"^] 以了解更多信息。
++
+从 ONTAP 9.10.1 开始，所有许可证都以 NetApp 许可证文件 (NLF) 的形式交付，该文件是启用多个功能的单个文件。有关详细信息，请参见link:https://docs.netapp.com/us-en/ontap/system-admin/manage-licenses-concept.html#licenses-included-with-ontap-one["ONTAP One 附带的许可证"^]。
+
++
+
+NOTE: 仅支持 SnapMirror 异步保护。
+
+
+
+.对等
+* *集群和 SVM*：必须对等 ONTAP 存储后端。请参阅  https://docs.netapp.com/us-en/ontap-sm-classic/peering/index.html["集群和 SVM 对等概述"^] 以了解更多信息。
++
+
+IMPORTANT: 确保在两个 ONTAP 集群之间的复制关系中使用的 SVM 名称是唯一的。
+
+* *Trident 和 SVM*：对等远程 SVM 必须可用于目标集群上的 Trident。
+
+
+.支持的驱动程序
+NetApp Trident 支持使用由以下驱动程序支持的存储类的 NetApp SnapMirror 技术进行卷复制：** `ontap-nas`: NFS ** `ontap-san`: iSCSI ** `ontap-san`: FC ** `ontap-san`: NVMe/TCP（需要最低 ONTAP 版本 9.15.1）
+
+
+NOTE: ASA r2 系统不支持使用 SnapMirror 进行卷复制。有关 ASA r2 系统的信息，请参见 link:https://docs.netapp.com/us-en/asa-r2/get-started/learn-about.html["了解 ASA r2 存储系统"^]。
+
+
+
+[[create-a-mirrored-pvc]]
+== 创建镜像 PVC
+
+按照以下步骤并使用 CRD 示例在主卷和二级卷之间创建镜像关系。
+
+.步骤
+. 在主 Kubernetes 集群上执行以下步骤：
++
+.. 使用  `trident.netapp.io/replication: true` 参数创建 StorageClass 对象。
++
+.示例
+[source, yaml]
+----
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: csi-nas
+provisioner: csi.trident.netapp.io
+parameters:
+  backendType: "ontap-nas"
+  fsType: "nfs"
+  trident.netapp.io/replication: "true"
+----
+.. 使用先前创建的 StorageClass 创建 PVC。
++
+.示例
+[source, yaml]
+----
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: csi-nas
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: csi-nas
+----
+.. 使用本地信息创建 MirrorRelationship CR。
++
+.示例
+[source, yaml]
+----
+kind: TridentMirrorRelationship
+apiVersion: trident.netapp.io/v1
+metadata:
+  name: csi-nas
+spec:
+  state: promoted
+  volumeMappings:
+  - localPVCName: csi-nas
+----
++
+Trident 获取卷的内部信息和卷的当前数据保护 (DP) 状态，然后填充 MirrorRelationship 的 status 字段。
+
+.. 获取 TridentMirrorRelationship CR 以获取 PVC 的内部名称和 SVM。
++
+[listing]
+----
+kubectl get tmr csi-nas
+----
++
+[source, yaml]
+----
+kind: TridentMirrorRelationship
+apiVersion: trident.netapp.io/v1
+metadata:
+  name: csi-nas
+  generation: 1
+spec:
+  state: promoted
+  volumeMappings:
+  - localPVCName: csi-nas
+status:
+  conditions:
+  - state: promoted
+    localVolumeHandle: "datavserver:trident_pvc_3bedd23c_46a8_4384_b12b_3c38b313c1e1"
+    localPVCName: csi-nas
+    observedGeneration: 1
+----
+
+
+. 请在辅助 Kubernetes 集群上执行以下步骤：
++
+.. 使用 trident.netapp.io/replication: true 参数创建 StorageClass。
++
+.示例
+[source, yaml]
+----
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: csi-nas
+provisioner: csi.trident.netapp.io
+parameters:
+  trident.netapp.io/replication: true
+----
+.. 创建包含目标和源信息的 MirrorRelationship CR。
++
+.示例
+[source, yaml]
+----
+kind: TridentMirrorRelationship
+apiVersion: trident.netapp.io/v1
+metadata:
+  name: csi-nas
+spec:
+  state: established
+  replicationPolicy: MirrorAllSnapshots
+  replicationSchedule: 5min
+  volumeMappings:
+  - localPVCName: csi-nas
+    remoteVolumeHandle: "datavserver:trident_pvc_3bedd23c_46a8_4384_b12b_3c38b313c1e1"
+----
++
+TMR `spec` 有四个顶级字段： `state`，用于设置所需的关系状态（请参阅 <<卷复制状态>>）； `volumeMappings`，用于将本地 PVC 与其远程卷句柄相关联；以及下面描述的可选  `replicationPolicy` 和  `replicationSchedule` 字段。
+
+
+
+
+
+ `replicationPolicy` 和  `replicationSchedule` 字段是可选的。将  `replicationPolicy` 设置为 ONTAP 上的异步 SnapMirror 策略的名称，并将  `replicationSchedule` 设置为 ONTAP 计划的名称。如果省略任一字段，Trident 将使用在后端配置的相应复制策略或计划。在创建关系时设置这些字段；建立关系后无法更改策略或计划。要使用不同的设置，请删除并重新创建 TMR。
+
+Trident 使用配置的复制策略和计划创建并初始化 SnapMirror 关系。
+
+. 使用先前创建的 StorageClass 创建 PVC 以充当辅助（SnapMirror 目标）。
++
+.示例
+[source, yaml]
+----
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: csi-nas
+  annotations:
+    trident.netapp.io/mirrorRelationship: csi-nas
+spec:
+  accessModes:
+  - ReadWriteMany
+resources:
+  requests:
+    storage: 1Gi
+storageClassName: csi-nas
+----
++
+Trident 将检查 TridentMirrorRelationship CRD，如果关系不存在，则无法创建卷。如果存在此关系，Trident 将确保将新 FlexVol 卷放置到与 MirrorRelationship 中定义的远程 SVM 对等的 SVM 上。
+
+
+
+
+
+[[volume-replication-states]]
+== 卷复制状态
+
+Trident 镜像关系（TMR）是表示 PVC 之间复制关系的一端的 CRD。目标 TMR 有一个状态，它告诉 Trident 所需的状态是什么。目标 TMR 具有以下状态：
+
+* *Established*：本地 PVC 是镜像关系的目标卷，这是一种新的关系。
+* *Promoted*：本地 PVC 是 ReadWrite 且可挂载的，目前没有镜像关系生效。
+* *已重新建立*：本地 PVC 是镜像关系的目标卷，此前也处于该镜像关系中。
++
+** 如果目标卷与源卷之间曾经存在关系，则必须使用重新建立的状态，因为它会覆盖目标卷的内容。
+** 如果卷以前未与源建立关系，则重新建立状态将失败。
+
+
+
+
+
+
+[[promote-secondary-pvc-during-an-unplanned-failover]]
+== 在计划外故障转移期间提升辅助 PVC
+
+在辅助 Kubernetes 集群上执行以下步骤：
+
+* 将 TridentMirrorRelationship 的 _spec.state_ 字段更新为 `promoted`。
+
+
+
+
+[[promote-secondary-pvc-during-a-planned-failover]]
+== 在计划的故障转移期间推广辅助 PVC
+
+在计划的故障转移（迁移）期间，请执行以下步骤来升级辅助 PVC：
+
+.步骤
+. 在主 Kubernetes 集群上，创建 PVC 的快照，并等待创建快照。
+. 在主 Kubernetes 集群上，创建 TridentTridentSnapshotInfoCR 以获取内部详细信息。
++
+.示例
+[source, yaml]
+----
+kind: TridentSnapshotInfo
+apiVersion: trident.netapp.io/v1
+metadata:
+  name: csi-nas
+spec:
+  snapshotName csi-nas-snapshot
+----
++
+.. 在辅助 Kubernetes 集群上，将 _TridentMirrorRelationship_ CR 的 _spec.state_ 字段更新为 _promoted_，并将 _spec.volumeMappings[].promotedSnapshotHandle_ 更新为快照的 internalName。
+
+
+. 在辅助 Kubernetes 集群上，确认 TridentMirrorRelationship 的状态（status.state 字段）为 promoted。
+
+
+
+
+[[restore-a-mirror-relationship-after-a-failover]]
+== 故障转移后恢复镜像关系
+
+在恢复镜像关系之前，请选择要作为新主要关系的一侧。
+
+.步骤
+. 在辅助 Kubernetes 集群上，请确保更新了 TridentMirrorRelationship 上的 _spec.remoteVolumeHandle_ 字段的值。
+. 在辅助 Kubernetes 集群上，将 TridentMirrorRelationship 的 _spec.state_ 字段更新为 `reestablished`。
+
+
+
+
+[[additional-operations]]
+== 其他操作
+
+Trident 支持主卷和二级卷上的以下操作：
+
+
+
+[[replicate-primary-pvc-to-a-new-secondary-pvc]]
+=== 将主要 PVC 复制到新的次要 PVC
+
+请确保已有一个主要 PVC 和一个次要 PVC。
+
+.步骤
+. 从已建立的辅助（目标）集群中删除 PersistentVolumeClaim 和 TridentMirrorRelationship CRD。
+. 从主（源）集群中删除 TridentMirrorRelationship CRD。
+. 在要建立的新辅助（目标） PVC 的主（源）集群上创建新的 TridentMirrorRelationship CRD。
+
+
+
+
+[[resize-a-mirrored-primary-or-secondary-pvc]]
+=== 调整镜像、主 PVC 或辅助 PVC 的大小
+
+PVC 可以正常调整大小，如果数据量超过当前大小，ONTAP 将自动扩展任何目标 flexvols。
+
+
+
+[[remove-replication-from-a-pvc]]
+=== 从 PVC 中删除复制
+
+要删除复制，请在当前辅助卷上执行以下操作之一：
+
+* 删除辅助 PVC 上的 MirrorRelationship。这会破坏复制关系。
+* 或者，将 spec.state 字段更新为 _promoted_。
+
+
+
+
+[[delete-a-pvc-that-was-previously-mirrored]]
+=== 删除 PVC（先前已镜像）
+
+Trident 检查复制的 PVC，并在尝试删除卷之前释放复制关系。
+
+
+
+[[delete-a-tmr]]
+=== 删除 TMR
+
+删除镜像关系一侧的 TMR 会导致剩余的 TMR 在 Trident 完成删除之前过渡到 _promoted_ 状态。如果选择删除的 TMR 已经处于 _promoted_ 状态，则不存在现有的镜像关系，TMR 将被删除，Trident 会将本地 PVC 提升为 _ReadWrite_。此删除将释放 ONTAP 中本地卷的 SnapMirror 元数据。如果将来在镜像关系中使用此卷，则在创建新的镜像关系时，必须使用具有 _established_ 卷复制状态的新 TMR。
+
+
+
+[[update-mirror-relationships-when-ontap-is-online]]
+== ONTAP 联机时更新镜像关系
+
+镜像关系建立后可以随时更新。您可以使用 `state: promoted`或 `state: reestablished`字段更新关系。将目标卷升级到常规 ReadWrite 卷时，您可以使用 _promotedSnapshotHandle_ 指定要将当前卷还原到的特定快照。
+
+
+
+[[update-mirror-relationships-when-ontap-is-offline]]
+== ONTAP 离线时更新镜像关系
+
+您可以使用 CRD 执行 SnapMirror 更新，而无需 Trident 直接连接到 ONTAP 集群。请参阅以下 TridentActionMirrorUpdate 格式示例：
+
+.示例
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentActionMirrorUpdate
+metadata:
+  name: update-mirror-b
+spec:
+  snapshotHandle: "pvc-1234/snapshot-1234"
+  tridentMirrorRelationshipName: mirror-b
+----
+`status.state` 反映了 TridentActionMirrorUpdate CRD 的状态。它可以取自 _Succeeded_、_In Progress_ 或 _Failed_ 的值。

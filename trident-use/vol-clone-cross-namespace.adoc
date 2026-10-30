@@ -1,0 +1,131 @@
+---
+sidebar: sidebar 
+permalink: trident-use/vol-clone-cross-namespace.html 
+keywords: volref, volume reference, clone, pvc, pv, namespace, cvna, cross-namespace, sharing, volumesnapshots 
+summary: 使用 Trident，您可以使用来自同一 K8s 集群中不同命名空间的现有卷或卷快照创建新卷。 
+---
+= 跨命名空间克隆 Trident 卷
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+使用 Trident，您可以使用来自同一 Kubernetes 集群内不同命名空间的现有卷或卷快照创建新卷。
+
+
+
+[[prerequisites]]
+== 前提条件
+
+在克隆卷之前，请确保源和目标后端的类型相同并且具有相同的存储类。
+
+
+NOTE: 只有 `ontap-san` 和 `ontap-nas` 存储驱动程序才支持跨命名空间克隆。不支持只读克隆。
+
+
+
+[[quick-start]]
+== 快速入门
+
+只需几步即可设置卷克隆。
+
+.image:https://raw.githubusercontent.com/NetAppDocs/common/main/media/number-1.png["一个"] 配置源 PVC 以克隆卷
+[role="quick-margin-para"]
+源命名空间所有者授予访问源 PVC 中的数据的权限。
+
+.image:https://raw.githubusercontent.com/NetAppDocs/common/main/media/number-2.png["两个"] 授予在目标命名空间中创建 CR 的权限
+[role="quick-margin-para"]
+群集管理员授予目标命名空间的所有者创建 TridentVolumeReference CR 的权限。
+
+.image:https://raw.githubusercontent.com/NetAppDocs/common/main/media/number-3.png["三"] 在目标命名空间中创建 TridentVolumeReference
+[role="quick-margin-para"]
+目标命名空间的所有者创建 TridentVolumeReference CR 以引用源 PVC。
+
+.image:https://raw.githubusercontent.com/NetAppDocs/common/main/media/number-4.png["四个"] 在目标命名空间中创建克隆 PVC
+[role="quick-margin-para"]
+目标命名空间的所有者创建 PVC 以从源命名空间克隆 PVC。
+
+
+
+[[configure-the-source-and-destination-namespaces]]
+== 配置源和目标命名空间
+
+为确保安全性，跨命名空间克隆卷需要源命名空间所有者、集群管理员和目标命名空间所有者的协作和操作。在每个步骤中指定用户角色。
+
+.步骤
+. *源命名空间所有者：* 在源命名空间(`namespace1`中创建 PVC(`pvc1`，通过使用 `cloneToNamespace`注解，授予与目标命名空间(`namespace2`共享的权限。
++
+[source, yaml]
+----
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: pvc1
+  namespace: namespace1
+  annotations:
+    trident.netapp.io/cloneToNamespace: namespace2
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: trident-csi
+  resources:
+    requests:
+      storage: 100Gi
+----
++
+Trident 创建 PV 及其后端存储卷。
+
++
+[NOTE]
+====
+** 您可以使用逗号分隔的列表将 PVC 共享到多个命名空间。例如， `trident.netapp.io/cloneToNamespace: namespace2,namespace3,namespace4`。
+** 您可以使用  `*` 共享到所有命名空间。例如， `trident.netapp.io/cloneToNamespace: *`
+** 您可以随时更新 PVC 以包含 `cloneToNamespace`注释。
+
+
+====
+. *集群管理员：* 确保已设置正确的 RBAC，以授予目标命名空间所有者在目标命名空间中创建 TridentVolumeReference CR 的权限(`namespace2`）。
+. *目标命名空间所有者：* 在目标命名空间中创建一个引用源 PVC 的 TridentVolumeReference CR `pvc1`。
++
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentVolumeReference
+metadata:
+  name: my-first-tvr
+  namespace: namespace2
+spec:
+  pvcName: pvc1
+  pvcNamespace: namespace1
+----
+. *目标命名空间所有者：* 在目标命名空间 (`namespace2`) 中创建一个 PVC (`pvc2`)，使用  `cloneFromPVC` 或  `cloneFromSnapshot`，以及  `cloneFromNamespace` 注解来指定源 PVC。
++
+[source, yaml]
+----
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  annotations:
+    trident.netapp.io/cloneFromPVC: pvc1
+    trident.netapp.io/cloneFromNamespace: namespace1
+  name: pvc2
+  namespace: namespace2
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: trident-csi
+  resources:
+    requests:
+      storage: 100Gi
+----
+
+
+
+
+[[limitations]]
+== 限制
+
+* 对于使用 ontap-nas-economy 驱动程序配置的 PVC，不支持只读克隆。
+

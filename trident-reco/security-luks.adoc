@@ -1,0 +1,276 @@
+---
+sidebar: sidebar 
+permalink: trident-reco/security-luks.html 
+keywords: security, luks, linux unified key setup, encryption, key rotation, resizing, advanced encryption, rotation, key, import 
+summary: '您可以启用 Linux Unified Key Setup (LUKS) 来加密 Trident 上的 ONTAP SAN 和 ONTAP SAN ECONOMY 卷。Trident 支持 LUKS 加密卷的卷大小调整和密钥（密码）旋转。' 
+---
+= Trident Linux 统一密钥设置（LUKS）
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+您可以启用 Linux Unified Key Setup (LUKS) 来加密 Trident 上的 ONTAP SAN 和 ONTAP SAN ECONOMY 卷。Trident 支持 LUKS 加密卷的密码短语轮换和卷扩展。
+
+在 Trident 中， LUKS 加密的卷使用 aes-xts-plain64 密码和模式，如 link:https://csrc.nist.gov/publications/detail/sp/800-38e/final["NIST"^] 所推荐。
+
+
+NOTE: ASA r2 系统不支持 LUKS 加密。有关 ASA r2 系统的信息，请参见 link:https://docs.netapp.com/us-en/asa-r2/get-started/learn-about.html["了解 ASA r2 存储系统"^]。
+
+.开始之前
+* 工作节点必须安装 cryptsetup 2.1 或更高版本（但低于 3.0）。有关详细信息，请访问 link:https://gitlab.com/cryptsetup/cryptsetup["Gitlab：cryptsetup"^]。
+* 出于性能原因，NetApp 建议工作节点支持高级加密标准新指令 (AES-NI)。要验证 AES-NI 支持，请运行以下命令：
++
+[listing]
+----
+grep "aes" /proc/cpuinfo
+----
++
+如果没有返回任何内容，则表示您的处理器不支持 AES-NI。有关 AES-NI 的更多信息，请访问：link:https://www.intel.com/content/www/us/en/developer/articles/technical/advanced-encryption-standard-instructions-aes-ni.html["Intel：高级加密标准指令 (AES-NI)"^]。
+
+
+
+
+
+[[enable-luks-encryption]]
+== 启用 LUKS 加密
+
+您可以使用 Linux Unified Key Setup (LUKS) 为 ONTAP SAN 和 ONTAP SAN ECONOMY 卷启用每个卷的主机端加密。
+
+.步骤
+. 在后端配置中定义 LUKS 加密属性。有关 ONTAP SAN 后端配置选项的更多信息，请参阅 link:../trident-use/ontap-san-examples.html["ONTAP SAN 配置选项"]。
++
+[source, json]
+----
+{
+  "storage": [
+    {
+      "labels": {
+        "luks": "true"
+      },
+      "zone": "us_east_1a",
+      "defaults": {
+        "luksEncryption": "true"
+      }
+    },
+    {
+      "labels": {
+        "luks": "false"
+      },
+      "zone": "us_east_1a",
+      "defaults": {
+        "luksEncryption": "false"
+      }
+    }
+  ]
+}
+----
+. 使用  `parameters.selector` 来定义使用 LUKS 加密的存储池。例如：
++
+[source, yaml]
+----
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: luks
+provisioner: csi.trident.netapp.io
+parameters:
+  selector: "luks=true"
+  csi.storage.k8s.io/node-stage-secret-name: luks-${pvc.name}
+  csi.storage.k8s.io/node-stage-secret-namespace: ${pvc.namespace}
+----
+. 创建一个包含 LUKS 密码短语的密钥。例如：
++
+[source, yaml]
+----
+kubectl -n trident create -f luks-pvc1.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: luks-pvc1
+stringData:
+  luks-passphrase-name: A
+  luks-passphrase: secretA
+----
+
+
+
+
+[[limitations]]
+=== 限制
+
+LUKS 加密的卷无法利用 ONTAP 重复数据删除和压缩。
+
+
+
+[[backend-configuration-for-importing-luks-volumes]]
+== 用于导入 LUKS 卷的后端配置
+
+要导入 LUKS 卷，您必须在后端将 `luksEncryption`设置为(`true`。 `luksEncryption`选项告诉 Trident 卷是否符合 LUKS 标准(`true`）或不符合 LUKS 标准(`false`），如以下示例所示。
+
+[source, yaml]
+----
+version: 1
+storageDriverName: ontap-san
+managementLIF: 10.0.0.1
+dataLIF: 10.0.0.2
+svm: trident_svm
+username: admin
+password: password
+defaults:
+  luksEncryption: 'true'
+  spaceAllocation: 'false'
+  snapshotPolicy: default
+  snapshotReserve: '10'
+----
+
+
+[[pvc-configuration-for-importing-luks-volumes]]
+== 用于导入 LUKS 卷的 PVC 配置
+
+要动态导入 LUKS 卷，请将注释  `trident.netapp.io/luksEncryption` 设置为  `true` 并在 PVC 中包含启用 LUKS 的存储类，如本示例所示。
+
+[source, yaml]
+----
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: luks-pvc
+  namespace: trident
+  annotations:
+    trident.netapp.io/luksEncryption: "true"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: luks-sc
+----
+
+
+[[rotate-a-luks-passphrase]]
+== 轮换 LUKS 密码短语
+
+您可以轮换 LUKS 密码短语并确认轮换。
+
+
+WARNING: 在验证密码短语不再被任何卷、快照或密码引用之前，请不要忘记该密码短语。如果引用的密码短语丢失，您可能无法挂载卷，并且数据将保持加密且无法访问。
+
+.关于此任务
+当在指定新的 LUKS 密码短语后创建挂载卷的 Pod 时，会发生 LUKS 密码短语轮换。创建新 Pod 时，Trident 会将卷上的 LUKS 密码短语与密码中的活动密码短语进行比较。
+
+* 如果卷上的密码与 secret 中的活动密码不匹配，则会发生旋转。
+* 如果卷上的密码与 secret 中的活动密码匹配，则此  `previous-luks-passphrase` 参数将被忽略。
+
+
+.步骤
+. 添加  `node-publish-secret-name` 和  `node-publish-secret-namespace` StorageClass 参数。例如：
++
+[source, yaml]
+----
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: csi-san
+provisioner: csi.trident.netapp.io
+parameters:
+  trident.netapp.io/backendType: "ontap-san"
+  csi.storage.k8s.io/node-stage-secret-name: luks
+  csi.storage.k8s.io/node-stage-secret-namespace: ${pvc.namespace}
+  csi.storage.k8s.io/node-publish-secret-name: luks
+  csi.storage.k8s.io/node-publish-secret-namespace: ${pvc.namespace}
+----
+. 识别卷或快照上的现有密码短语。
++
+.卷
+[listing]
+----
+tridentctl -d get volume luks-pvc1
+GET http://127.0.0.1:8000/trident/v1/volume/<volumeID>
+
+...luksPassphraseNames:["A"]
+----
++
+.Snapshot
+[listing]
+----
+tridentctl -d get snapshot luks-pvc1
+GET http://127.0.0.1:8000/trident/v1/volume/<volumeID>/<snapshotID>
+
+...luksPassphraseNames:["A"]
+----
+. 更新卷的 LUKS 密钥以指定新的和以前的密码。请确保  `previous-luke-passphrase-name` 和  `previous-luks-passphrase` 匹配之前的密码短语。
++
+[source, yaml]
+----
+apiVersion: v1
+kind: Secret
+metadata:
+  name: luks-pvc1
+stringData:
+  luks-passphrase-name: B
+  luks-passphrase: secretB
+  previous-luks-passphrase-name: A
+  previous-luks-passphrase: secretA
+----
+. 创建挂载卷的新 pod。这是启动轮换所必需的。
+. 验证密码短语已轮换。
++
+.卷
+[listing]
+----
+tridentctl -d get volume luks-pvc1
+GET http://127.0.0.1:8000/trident/v1/volume/<volumeID>
+
+...luksPassphraseNames:["B"]
+----
++
+.Snapshot
+[listing]
+----
+tridentctl -d get snapshot luks-pvc1
+GET http://127.0.0.1:8000/trident/v1/volume/<volumeID>/<snapshotID>
+
+...luksPassphraseNames:["B"]
+----
+
+
+.结果
+当仅在卷和快照上返回新密码短语时，密码短语已轮换。
+
+
+NOTE: 如果返回两个密码短语，例如 `luksPassphraseNames: ["B", "A"]`，则旋转是不完整的。您可以触发一个新的 pod 来尝试完成旋转。
+
+
+
+[[enable-volume-expansion]]
+== 启用卷扩展
+
+您可以在 LUKS 加密的卷上启用卷扩展。
+
+.步骤
+. 启用 `CSINodeExpandSecret`功能门（beta 1.25+）。有关详细信息，请参阅 link:https://kubernetes.io/blog/2022/09/21/kubernetes-1-25-use-secrets-while-expanding-csi-volumes-on-node-alpha/["Kubernetes 1.25：使用 Secrets 进行节点驱动的 CSI 卷扩展"^]。
+. 添加  `node-expand-secret-name` 和  `node-expand-secret-namespace` StorageClass 参数。例如：
++
+[source, yaml]
+----
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: luks
+provisioner: csi.trident.netapp.io
+parameters:
+  selector: "luks=true"
+  csi.storage.k8s.io/node-stage-secret-name: luks-${pvc.name}
+  csi.storage.k8s.io/node-stage-secret-namespace: ${pvc.namespace}
+  csi.storage.k8s.io/node-expand-secret-name: luks-${pvc.name}
+  csi.storage.k8s.io/node-expand-secret-namespace: ${pvc.namespace}
+allowVolumeExpansion: true
+----
+
+
+.结果
+启动在线存储扩展时， kubelet 会将相应的凭据传递给驱动程序。

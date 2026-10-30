@@ -1,0 +1,93 @@
+---
+sidebar: sidebar 
+permalink: trident-get-started/architecture.html 
+keywords: trident backend, AFF, FAS, ONTAP Select, Cloud, Amazon FSx for NetApp ONTAP, drivers, ONTAP drivers 
+summary: Trident 在集群中的每个工作节点上作为单个控制器 Pod 和一个节点 Pod 运行。节点 pod 必须运行在任何可能要装载 Trident 卷的主机上。 
+---
+= Trident 架构
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+Trident 在集群中的每个工作节点上作为单个控制器 Pod 和一个节点 Pod 运行。节点 pod 必须运行在任何可能要装载 Trident 卷的主机上。
+
+
+
+[[understanding-controller-pods-and-node-pods]]
+== 了解控制器 pod 和节点 pod
+
+Trident 在 Kubernetes 集群上部署为单个 <<Trident 控制器 Pod>> 和一个或多个 <<Trident 节点 Pod>>，并使用标准的 Kubernetes _CSI Sidecar Containers_ 来简化 CSI 插件的部署。link:https://kubernetes-csi.github.io/docs/sidecar-containers.html["Kubernetes CSI Sidecar 容器"^] 由 Kubernetes Storage 社区维护。
+
+Kubernetes link:https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/["节点选择器"^] 和 link:https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/["容忍和污点"^] 用于限制 pod 在特定或首选节点上运行。您可以在 Trident 安装期间为控制器和节点 pod 配置节点选择器和容差。
+
+* 控制器插件处理卷配置和管理，例如快照和调整大小。
+* 节点插件处理将存储附加到节点。
+
+
+.在 Kubernetes 集群上部署的 Trident
+image::../media/trident-arch.png[Kubernetes 集群上的 Trident 架构示意图。]
+
+
+
+[[trident-controller-pod]]
+=== Trident 控制器 Pod
+
+Trident Controller Pod 是运行 CSI Controller 插件的单个 Pod。
+
+* 负责配置和管理 NetApp 存储中的卷
+* 通过 Kubernetes Deployment 管理
+* 可以在控制平面或工作节点上运行，具体取决于安装参数。
+
+
+.Trident 控制器 Pod 图
+image::../media/controller-pod.png[运行带有适用 CSI 侧车的 CSI Controller 插件的 Trident Controller Pod 示意图。]
+
+
+
+[[trident-node-pods]]
+=== Trident 节点 Pod
+
+Trident 节点 Pod 是运行 CSI 节点插件的特权 Pod。
+
+* 负责挂载和卸载主机上运行的 Pod 的存储
+* 通过 Kubernetes DaemonSet 管理
+* 必须在将装载 NetApp 存储的任何节点上运行
+
+
+.Trident 节点 Pod 图
+image::../media/node-pod.png[运行 CSI 节点插件和适用的 CSI Sidecar 的 Trident 节点 Pod 示意图。]
+
+
+
+[[supported-kubernetes-cluster-architectures]]
+== 支持的 Kubernetes 集群架构
+
+以下 Kubernetes 架构支持 Trident：
+
+[cols="3,1,2"]
+|===
+| Kubernetes 集群架构 | 支持 | 默认安装 
+
+
+| 单主机，计算 | 是  a| 
+是
+
+
+
+| 多个主节点、计算节点 | 是  a| 
+是
+
+
+
+| Master、 `etcd`、compute | 是  a| 
+是
+
+
+
+| 主控、基础架构、计算 | 是  a| 
+是
+
+|===

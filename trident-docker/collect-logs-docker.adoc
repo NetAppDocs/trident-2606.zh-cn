@@ -1,0 +1,79 @@
+---
+sidebar: sidebar 
+permalink: trident-docker/collect-logs-docker.html 
+keywords: deploy, Trident, trident for docker, docker, logs, binary, managed plugin 
+summary: 您可以收集日志以获得故障排除方面的帮助。用于收集日志的方法因运行 Docker 插件的方式而异。 
+---
+= 收集日志
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+您可以收集日志以获得故障排除方面的帮助。用于收集日志的方法因运行 Docker 插件的方式而异。
+
+
+
+[[collect-logs-for-troubleshooting]]
+== 收集日志以进行故障排除
+
+.步骤
+. 如果使用推荐的托管插件方法（即使用 `docker plugin`命令）运行 Trident，请按如下方式查看：
++
+[source, console]
+----
+docker plugin ls
+----
++
+[listing]
+----
+ID                  NAME                DESCRIPTION                          ENABLED
+4fb97d2b956b        netapp:latest       nDVP - NetApp Docker Volume Plugin   false
+journalctl -u docker | grep 4fb97d2b956b
+----
++
+标准日志记录级别应允许您诊断大多数问题。如果您发现这还不够，则可以启用调试日志记录。
+
+. 要启用调试日志记录，请安装启用调试日志记录的插件：
++
+[source, console]
+----
+docker plugin install netapp/trident-plugin:<version> --alias <alias> debug=true
+----
++
+或者，在已安装插件时启用调试日志记录：
+
++
+[source, console]
+----
+docker plugin disable <plugin>
+----
++
+[source, console]
+----
+docker plugin set <plugin> debug=true
+----
++
+[source, console]
+----
+docker plugin enable <plugin>
+----
+. 如果您在主机上运行二进制文件本身，则可在主机的  `/var/log/netappdvp` 目录中找到日志。要启用调试日志记录，请在运行插件时指定  `-debug`。
+
+
+
+
+[[general-troubleshooting-tips]]
+== 常规故障排除提示
+
+* 新用户遇到的最常见问题是配置错误，导致插件无法初始化。当发生这种情况时，您尝试安装或启用插件时可能会看到这样的消息：
++
+`Error response from daemon: dial unix /run/docker/plugins/<id>/netapp.sock: connect: no such file or directory`
+
++
+这意味着插件无法启动。幸运的是，该插件具有全面的日志记录功能，可以帮助您诊断可能遇到的大多数问题。
+
+* 如果将 PV 挂载到容器时出现问题，请确保 `rpcbind` 已安装并正在运行。请使用主机操作系统所需的软件包管理器，并检查 `rpcbind` 是否正在运行。可以通过运行 `systemctl status rpcbind`或其等效项来检查 rpcbind 服务的状态。
+

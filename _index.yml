@@ -1,0 +1,68 @@
+---
+indexpage:
+  title: Trident 26.06 文档
+  summary: Trident 是一个由 NetApp 维护的开源存储资源调配器和编排器。它可为 Docker 和 Kubernetes 管理的容器化应用程序创建存储卷。
+  keywords: trident, 2602, documentation, release notes, get started, deploy, upgrade,
+    use, data management, protection, demos, tutorials, blogs, community
+  lead: Trident 是一个由 NetApp 维护的开源存储资源调配器和编排器。它可为 Docker 和 Kubernetes 管理的容器化应用程序创建存储卷。
+  tiles:
+  - title: 发行说明
+    links:
+    - title: 新增功能
+      url: trident-rn.html
+    - title: 早期版本
+      url: "/earlier-versions.html"
+    - title: Trident 对 ASA r2 存储系统的支持
+      url: "/trident-asar2-support.html"
+  - title: 开始使用
+    links:
+    - title: 了解 Trident
+      url: "/trident-get-started/intro.html"
+    - title: 要求
+      url: "/trident-get-started/requirements.html"
+    - title: 快速入门
+      url: "/trident-get-started/quickstart.html"
+  - title: 部署 Trident
+    links:
+    - title: 使用 Trident 操作员进行部署
+      url: "/trident-install/kubernetes-deploy-operator.html"
+    - title: 使用 tridentctl 部署
+      url: "/trident-install/kubernetes-deploy-tridentctl.html"
+    - title: 为 Docker 部署 Trident
+      url: "/trident-docker/deploy-docker.html"
+  - title: 升级 Trident
+    links:
+    - title: 使用 Trident 操作员升级
+      url: "/trident-managing-k8s/upgrade-operator.html"
+    - title: 使用 tridentctl 升级
+      url: "/trident-managing-k8s/upgrade-tridentctl.html"
+  - title: 使用 Trident
+    links:
+    - title: 准备工作节点
+      url: "/trident-use/worker-node-prep.html"
+    - title: 配置后端
+      url: "/trident-use/backends.html"
+    - title: 管理存储类
+      url: "/trident-use/manage-stor-class.html"
+    - title: 执行卷操作
+      url: "/trident-use/vol-operations.html"
+  - title: 高级数据管理和保护
+    links:
+    - title: 使用 Trident Protect 实现高级数据保护
+      url: "/trident-protect/learn-about-trident-protect.html"
+    - title: 部署 Trident Protect
+      url: "/trident-protect/trident-protect-installation.html"
+    - title: 升级 Trident Protect
+      url: "/trident-protect/trident-protect-upgrade.html"
+  - title: 演示和教程
+    links:
+    - title: Trident 视频
+      url: https://media.netapp.com/video-detail/c5bebae0-aab6-5fed-ae16-df6a3a8b260d/netapp-trident-advanced-data-protection-for-kubernetes-applications
+  - title: 博客和社区
+    links:
+    - title: Trident 和 Trident Protect 博客
+      url: "/blog-posts.html"
+    - title: NetApp.io
+      url: https://netapp.io/
+    - title: Discord
+      url: https://discord.gg/NetApp

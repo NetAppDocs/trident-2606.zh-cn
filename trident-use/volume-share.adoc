@@ -1,0 +1,181 @@
+---
+sidebar: sidebar 
+permalink: trident-use/volume-share.html 
+keywords: volref, volume reference, share, pvc, pv, nfs, namespace, cvna, cross-namespace, sharing 
+summary: 使用 Trident，您可以在主命名空间中创建卷，并在一个或多个辅助命名空间中共享它。 
+---
+= 跨命名空间共享 Trident NFS 卷
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+使用 Trident，您可以在主命名空间中创建卷，并在一个或多个辅助命名空间中共享它。
+
+
+
+[[features]]
+== 功能
+
+TridentVolumeReference CR 允许您在一个或多个 Kubernetes 命名空间之间安全地共享 ReadWriteMany (RWX) NFS 卷。此 Kubernetes 原生解决方案具有以下优势：
+
+* 多级访问控制，确保安全
+* 适用于所有 Trident NFS 卷驱动程序
+* 不依赖 tridentctl 或任何其他非本地 Kubernetes 功能
+
+
+此图说明了两个 Kubernetes 命名空间之间的 NFS 卷共享。
+
+image::cross-namespace-sharing.png[跨命名空间共享的概念图。]
+
+
+
+[[quick-start]]
+== 快速入门
+
+只需几个步骤即可设置 NFS 卷共享。
+
+.image:https://raw.githubusercontent.com/NetAppDocs/common/main/media/number-1.png["一个"] 配置源 PVC 以共享卷
+[role="quick-margin-para"]
+源命名空间所有者授予访问源 PVC 中的数据的权限。
+
+.image:https://raw.githubusercontent.com/NetAppDocs/common/main/media/number-2.png["两个"] 授予在目标命名空间中创建 CR 的权限
+[role="quick-margin-para"]
+群集管理员授予目标命名空间的所有者创建 TridentVolumeReference CR 的权限。
+
+.image:https://raw.githubusercontent.com/NetAppDocs/common/main/media/number-3.png["三"] 在目标命名空间中创建 TridentVolumeReference
+[role="quick-margin-para"]
+目标命名空间的所有者创建 TridentVolumeReference CR 以引用源 PVC。
+
+.image:https://raw.githubusercontent.com/NetAppDocs/common/main/media/number-4.png["四个"] 在目标命名空间中创建从属 PVC
+[role="quick-margin-para"]
+目标命名空间的所有者创建从属 PVC 以使用来自源 PVC 的数据源。
+
+
+
+[[configure-the-source-and-destination-namespaces]]
+== 配置源和目标命名空间
+
+为了确保安全性，跨命名空间共享需要源命名空间所有者、集群管理员和目标命名空间所有者的协作和操作。在每个步骤中指定用户角色。
+
+.步骤
+. *源命名空间所有者：* 在源命名空间中创建 PVC (`pvc1`)，通过使用 `shareToNamespace`注解，授予与目标命名空间(`namespace2`)共享的权限。
++
+[source, yaml]
+----
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: pvc1
+  namespace: namespace1
+  annotations:
+    trident.netapp.io/shareToNamespace: namespace2
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: trident-csi
+  resources:
+    requests:
+      storage: 100Gi
+----
++
+Trident 创建 PV 及其后端 NFS 存储卷。
+
++
+[NOTE]
+====
+** 您可以使用逗号分隔的列表将 PVC 共享到多个命名空间。例如， `trident.netapp.io/shareToNamespace: namespace2,namespace3,namespace4`。
+** 您可以使用  `*` 共享到所有命名空间。例如， `trident.netapp.io/shareToNamespace: *`
+** 您可以随时更新 PVC 以包含 `shareToNamespace`注释。
+
+
+====
+. *集群管理员：*确保已设置正确的 RBAC，以授予目标命名空间所有者在目标命名空间中创建 TridentVolumeReference CR 的权限。
+. *目标命名空间所有者：* 在目标命名空间中创建引用源命名空间的 TridentVolumeReference CR `pvc1`。
++
+[source, yaml]
+----
+apiVersion: trident.netapp.io/v1
+kind: TridentVolumeReference
+metadata:
+  name: my-first-tvr
+  namespace: namespace2
+spec:
+  pvcName: pvc1
+  pvcNamespace: namespace1
+----
+. *目标命名空间所有者：* 在目标命名空间 (`namespace2`) 中创建一个 PVC (`pvc2`)，并使用  `shareFromPVC` 注解来指定源 PVC。
++
+[source, yaml]
+----
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  annotations:
+    trident.netapp.io/shareFromPVC: namespace1/pvc1
+  name: pvc2
+  namespace: namespace2
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: trident-csi
+  resources:
+    requests:
+      storage: 100Gi
+----
++
+
+NOTE: 目标 PVC 的大小必须小于或等于源 PVC。
+
+
+
+.结果
+Trident 读取目标 PVC 上的 `shareFromPVC`注释，并将目标 PV 创建为没有自己的存储资源的从属卷，该卷指向源 PV 并共享源 PV 存储资源。目标 PVC 和 PV 显示为正常绑定。
+
+
+
+[[delete-a-shared-volume]]
+== 删除共享卷
+
+您可以删除跨多个命名空间共享的卷。Trident 将删除对源命名空间上卷的访问权限，并保留对共享该卷的其他命名空间的访问权限。当引用该卷的所有命名空间都被删除时，Trident 会删除该卷。
+
+
+
+[[use-tridentctl-get-to-query-subordinate-volumes]]
+== 使用  `tridentctl get` 查询从属卷
+
+使用该[`tridentctl`实用程序，您可以运行该 `get`命令来获取从属卷。有关详细信息，请参见 link:../trident-reference/trident-cl.html[`tridentctl` 命令和选项]。
+
+[listing]
+----
+Usage:
+  tridentctl get [option]
+----
+标记：
+
+* ``-h, --help`: 卷的帮助。
+* `--parentOfSubordinate string`: 将查询限制为从属源卷。
+* `--subordinateOf string`: 将查询限制为卷的下属。
+
+
+
+
+[[limitations]]
+== 限制
+
+* Trident 无法阻止目标命名空间写入共享卷。您应该使用文件锁定或其他进程来防止覆盖共享卷数据。
+* 您不能通过删除 `shareToNamespace`或 `shareFromNamespace`注释或删除 `TridentVolumeReference` CR 来撤销对源 PVC 的访问权限。要撤销访问权限，您必须删除从属 PVC。
+* 无法在从属卷上执行快照、克隆和镜像。
+
+
+
+
+[[for-more-information]]
+== 了解更多信息
+
+要了解有关跨命名空间卷访问的更多信息：
+
+* 观看 link:https://media.netapp.com/page/9071d19d-1438-5ed3-a7aa-ea4d73c28b7f/solutions-products["NetAppTV"^] 上的演示。
+

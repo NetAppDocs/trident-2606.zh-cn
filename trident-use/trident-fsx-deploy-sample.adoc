@@ -1,0 +1,75 @@
+---
+sidebar: sidebar 
+permalink: trident-use/trident-fsx-deploy-sample.html 
+keywords: map backends, storage classes, trident backend, ontap-nas, ontap-nas-economy, ontap-nas-flexgroups, options, storageclasses, fsx 
+summary: 了解 Amazon FSx for ONTAP 的后端配置选项。本节提供了后端配置示例。 
+---
+= 部署应用程序
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+创建存储类和 PVC 后，您可以将 PV 安装到 Pod 上。本节列出了将 PV 附加到 Pod 的示例命令和配置。
+
+
+
+= 部署示例应用程序
+
+.步骤
+. 在 Pod 中挂载卷。
++
+[source, console]
+----
+kubectl create -f pv-pod.yaml
+----
++
+以下示例显示了将 PVC 连接到 pod 的基本配置：*基本配置*：
+
++
+[source, yaml]
+----
+kind: Pod
+apiVersion: v1
+metadata:
+  name: pv-pod
+spec:
+  volumes:
+    - name: pv-storage
+      persistentVolumeClaim:
+       claimName: basic
+  containers:
+    - name: pv-container
+      image: nginx
+      ports:
+        - containerPort: 80
+          name: "http-server"
+      volumeMounts:
+        - mountPath: "/my/mount/path"
+          name: pv-storage
+----
++
+
+NOTE: 您可以使用  `kubectl get pod --watch` 监控进度。
+
+. 验证卷是否已装入  `/my/mount/path`。
++
+[source, console]
+----
+kubectl exec -it pv-pod -- df -h /my/mount/path
+----
+
+
+[listing]
+----
+Filesystem                                                        Size  Used  Avail Use%  Mounted on
+192.168.188.78:/trident_pvc_ae45ed05_3ace_4e7c_9080_d2a83ae03d06  1.1G  320K  1.0G   1%   /my/mount/path
+----
+现在您可以删除 Pod 了。Pod 应用程序将不再存在，但卷将保持不变。
+
+[source, console]
+----
+kubectl delete pod pv-pod
+----

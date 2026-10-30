@@ -1,0 +1,104 @@
+---
+sidebar: sidebar 
+permalink: trident-install/openshift-certified-operator-deploy.html 
+keywords: deploy, trident, methods, operator, openshift, operatorhub, certified operator, community operator, helm 
+summary: 如果使用 Red Hat OpenShift，则可以从社区操作员、基于 Helm 的安装或手动部署的操作员切换到经过认证的 Trident 操作员。 
+---
+= 切换到 OpenShift 认证的 Trident 操作员
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+您可以从社区操作员、基于 Helm 的安装或手动部署的操作员切换到 Red Hat OpenShift 认证的 Trident 操作员。每种方法的过程包括卸载现有操作员，然后使用 OperatorHub 安装认证操作员。
+
+.开始之前
+在您开始安装之前，link:../trident-get-started/requirements.html["为 Trident 安装准备环境"]。
+
+
+IMPORTANT: 请勿在卸载过程中删除 `TridentOrchestrator`自定义资源 (CR)。 `TridentOrchestrator` CR 保留您的后端和存储类配置，这是在安装认证操作员后所需的配置。
+
+
+
+[[switch-from-the-community-operator]]
+== 从社区运营商切换
+
+.步骤
+. 使用 OpenShift 控制台导航到 OperatorHub。
++
+image::../media/openshift-operator-05.png[安装]
+
+. 找到 NetApp Trident 社区操作员。
++
+image::../media/openshift-operator-06.png[已安装]
+
++
+
+WARNING: 不要选择 *Delete all operand instances from this operator*。
+
+. 单击 *Uninstall* 。
+. 卸载完成后，请继续 <<install-certified,安装 OpenShift 认证操作员>>。
+
+
+
+
+[[switch-from-a-helm-based-operator-installation]]
+== 从基于 Helm 的操作员安装切换
+
+.步骤
+. 列出 Trident 安装的 Helm 版本：
++
+[listing]
+----
+helm ls -n trident
+----
+. 卸载 Helm 版本：
++
+[listing]
+----
+helm uninstall <release-name> -n trident
+----
+. 卸载完成后，请继续 <<install-certified,安装 OpenShift 认证操作员>>。
+
+
+
+
+[[switch-from-a-manually-deployed-operator]]
+== 从手动部署的 operator 切换
+
+如果您通过使用安装程序包中的  `bundle.yaml` 手动部署操作员来安装 Trident，请通过删除相同的清单来删除它。
+
+.步骤
+. 使用捆绑清单删除操作员部署：
++
+[listing]
+----
+kubectl delete -f deploy/bundle.yaml -n trident
+----
+. 卸载完成后，请继续 <<install-certified,安装 OpenShift 认证操作员>>。
+
+
+
+
+[[install-the-openshift-certified-operator]]
+[[install-certified]]
+== 安装 OpenShift 认证操作员
+
+.步骤
+. 导航到 Red Hat OperatorHub。
+. 搜索并选择 NetApp Trident Operator。
++
+image::../media/openshift-operator-05.png[安装]
+
+. 按照屏幕上的说明安装 operator。
+
+
+
+
+[[verification]]
+== 验证
+
+* 请检查控制台中的 OperatorHub，以确保已成功安装新的认证操作员。
+

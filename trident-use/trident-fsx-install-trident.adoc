@@ -1,0 +1,356 @@
+---
+sidebar: sidebar 
+permalink: trident-use/trident-fsx-install-trident.html 
+keywords: Amazon FSx for NetApp ONTAP, FSx for ONTAP, deploy Trident, integrate Trident, Trident add-on, Trident EKS add-on, Trident AWS EKS add-on 
+summary: '使用 Trident 和 Amazon FSx for NetApp ONTAP，您可以确保在 Amazon Elastic Kubernetes Service (EKS) 中运行的 Kubernetes 集群可以配置由 ONTAP 支持的块和文件持久卷。' 
+---
+= 安装 Trident
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+Trident 简化了 Kubernetes 中 Amazon FSx for NetApp ONTAP 存储管理，使您的开发人员和管理员能够专注于应用程序部署。您可以使用以下方法之一安装 Trident：
+
+* Helm
+* EKS 附加项
+
+
+如果要使用快照功能，请安装 CSI 快照控制器加载项。有关详细信息，请参见link:https://docs.aws.amazon.com/eks/latest/userguide/csi-snapshot-controller.html["为 CSI 卷启用快照功能"^]。
+
+
+
+[[install-trident-via-helm]]
+== 通过 helm 安装 Trident
+
+[role="tabbed-block"]
+====
+.Pod 身份
+--
+. 添加 Trident Helm 存储库：
++
+[source, console]
+----
+helm repo add netapp-trident https://netapp.github.io/trident-helm-chart
+----
+. 请使用以下示例安装 Trident：
++
+[source, console]
+----
+helm install trident-operator netapp-trident/trident-operator --version 100.2502.1 --namespace trident --create-namespace
+----
++
+您可以使用  `helm list` 命令查看安装详细信息，例如名称、命名空间、图表、状态、应用版本和修订版号。
+
++
+[source, console]
+----
+helm list -n trident
+----
++
+[listing]
+----
+NAME                NAMESPACE   REVISION    UPDATED                                 STATUS       CHART                          APP VERSION
+
+trident-operator    trident     1           2024-10-14 14:31:22.463122 +0300 IDT    deployed     trident-operator-100.2502.0    25.02.0
+----
+
+
+--
+.服务账户关联 (IRSA)
+--
+. 添加 Trident Helm 存储库：
++
+[source, console]
+----
+helm repo add netapp-trident https://netapp.github.io/trident-helm-chart
+----
+. 设置 *cloud provider* 和 *cloud identity* 的值：
++
+[source, console]
+----
+helm install trident-operator netapp-trident/trident-operator --version 100.2502.1  \
+--set cloudProvider="AWS" \
+--set cloudIdentity="'eks.amazonaws.com/role-arn: arn:aws:iam::<accountID>:role/<AmazonEKS_FSxN_CSI_DriverRole>'" \
+--namespace trident \
+--create-namespace
+----
++
+您可以使用  `helm list` 命令查看安装详细信息，例如名称、命名空间、图表、状态、应用版本和修订版号。
+
++
+[source, console]
+----
+helm list -n trident
+----
++
+[listing]
+----
+NAME                NAMESPACE   REVISION    UPDATED                                 STATUS       CHART                          APP VERSION
+
+trident-operator    trident     1           2024-10-14 14:31:22.463122 +0300 IDT    deployed     trident-operator-100.2510.0    25.10.0
+----
+
+
+--
+====
+[NOTE]
+====
+如果您计划使用 iSCSI，请确保在您的客户端计算机上启用了 iSCSI。如果您使用的是 AL2023 Worker 节点操作系统，则可以通过在 helm 安装中添加 node prep 参数来自动安装 iSCSI 客户端：
+
+[source, console]
+----
+helm install trident-operator netapp-trident/trident-operator --version 100.2502.1 --namespace trident --create-namespace –-set nodePrep={iscsi}
+----
+====
+
+
+[[install-trident-via-the-eks-add-on]]
+== 通过 EKS 附加组件安装 Trident
+
+Trident EKS 加载项包含最新的安全补丁、错误修复，并经过 AWS 验证可与 Amazon EKS 配合使用。EKS 加载项使您能够始终如一地确保 Amazon EKS 集群的安全和稳定，并减少安装、配置和更新加载项所需的工作量。
+
+
+
+[[prerequisites]]
+=== 前提条件
+
+在为 AWS EKS 配置 Trident 加载项之前，请确保具备以下条件：
+
+* 具有附加订阅的 Amazon EKS 集群帐户
+* AWS 对 AWS marketplace 的权限：
+`"aws-marketplace:ViewSubscriptions",
+"aws-marketplace:Subscribe",
+"aws-marketplace:Unsubscribe`
+* AMI 类型：Amazon Linux 2 (AL2_x86_64) 或 Amazon Linux 2 Arm(AL2_ARM_64)
+* 节点类型：AMD 或 ARM
+* 现有 Amazon FSx for NetApp ONTAP 文件系统
+
+
+
+
+[[enable-the-trident-add-on-for-aws]]
+=== 为 AWS 启用 Trident 加载项
+
+[role="tabbed-block"]
+====
+.管理控制台
+--
+. 在  https://console.aws.amazon.com/eks/home#/clusters[] 打开 Amazon EKS 控制台。
+. 在左侧导航窗格中，选择 *Clusters*。
+. 选择要为其配置 NetApp Trident CSI 加载项的群集的名称。
+. 选择 *Add-ons*，然后选择 *Get more add-ons*。
+. 按照以下步骤选择附加组件：
++
+.. 向下滚动到 *AWS Marketplace add-ons* 部分，然后在搜索框中键入 *"Trident"*。
+.. 选中 Trident by NetApp 框右上角的复选框。
+.. 选择 *Next*。
+
+
+. 在 *Configure selected add-ons* 设置页面上，执行以下操作：
++
+
+NOTE: *如果您使用的是 Pod Identity 关联，请跳过这些步骤。*
+
++
+.. 选择您想要使用的 *Version*。
+.. 如果使用 IRSA 身份验证，请确保在可选配置设置中设置可用的配置值：
++
+*** 选择您想要使用的 *Version*。
+*** 按照*附加组件配置模式*，将*配置值*部分的*configurationValues*参数设置为您在上一步骤中创建的角色 arn（值应采用以下格式）：
+
+
+
+
++
+[source, JSON]
+----
+{
+
+  "cloudIdentity": "'eks.amazonaws.com/role-arn: <role ARN>'",
+  "cloudProvider": "AWS"
+
+}
+----
++
+如果为冲突解决方法选择覆盖，则可以使用 Amazon EKS 加载项设置覆盖现有加载项的一个或多个设置。如果未启用此选项，并且与现有设置存在冲突，则操作将失败。您可以使用生成的错误消息来排除冲突。在选择此选项之前，请确保 Amazon EKS 加载项不会管理您需要自我管理的设置。
+
+. 选择 *Next*。
+. 在 *Review and add* 页面上，选择 *Create*。
++
+加载项安装完成后，您将看到已安装的加载项。
+
+
+
+--
+.AWS CLI
+--
+*1.创建 `add-on.json`文件*：
+
+*对于 Pod Identity，请使用以下格式*：
+
+
+NOTE: 使用
+
+[source, json]
+----
+{
+  "clusterName": "<eks-cluster>",
+  "addonName": "netapp_trident-operator",
+  "addonVersion": "v25.6.0-eksbuild.1",
+}
+----
+*对于 IRSA 身份验证，请使用以下格式*：
+
+[source, json]
+----
+{
+  "clusterName": "<eks-cluster>",
+  "addonName": "netapp_trident-operator",
+  "addonVersion": "v25.6.0-eksbuild.1",
+  "serviceAccountRoleArn": "<role ARN>",
+  "configurationValues": {
+    "cloudIdentity": "'eks.amazonaws.com/role-arn: <role ARN>'",
+    "cloudProvider": "AWS"
+  }
+}
+----
+
+NOTE: 将  `<role ARN>` 替换为上一步中创建的角色的 ARN。
+
+*2.安装 Trident EKS 附加组件。*
+
+[source, console]
+----
+aws eks create-addon --cli-input-json file://add-on.json
+----
+--
+.eksctl
+--
+以下示例命令安装 Trident EKS 加载项：
+
+[source, console]
+----
+eksctl create addon --name netapp_trident-operator --cluster <cluster_name> --force
+----
+--
+====
+
+
+[[update-the-trident-eks-add-on]]
+=== 更新 Trident EKS 附加组件
+
+[role="tabbed-block"]
+====
+.管理控制台
+--
+. 打开 Amazon EKS 控制台 https://console.aws.amazon.com/eks/home#/clusters[]。
+. 在左侧导航窗格中，选择 *Clusters*。
+. 选择要为其更新 NetApp Trident CSI 加载项的群集的名称。
+. 选择 *Add-ons* 选项卡。
+. 选择 *Trident by NetApp* ，然后选择 *Edit* 。
+. 在 *Configure Trident by NetApp* 页面上，执行以下操作：
++
+.. 选择您想要使用的 *Version*。
+.. 展开 *Optional configuration settings* 并根据需要进行修改。
+.. 选择*Save changes*。
+
+
+
+
+--
+.AWS CLI
+--
+以下示例更新 EKS 加载项：
+
+[source, console]
+----
+aws eks update-addon --cluster-name <eks_cluster_name> --addon-name netapp_trident-operator --addon-version v25.6.0-eksbuild.1 \
+  --service-account-role-arn <role-ARN> --resolve-conflict preserve \
+  --configuration-values “{\"cloudIdentity\": \"'eks.amazonaws.com/role-arn: <role ARN>'\"}"
+----
+--
+.eksctl
+--
+* 检查 FSxN Trident CSI 附加组件的当前版本。将  `my-cluster` 替换为您的集群名称。
++
+[source, console]
+----
+eksctl get addon --name netapp_trident-operator --cluster my-cluster
+----
++
+*输出示例：*
+
+
+
+[listing]
+----
+NAME                        VERSION             STATUS    ISSUES    IAMROLE    UPDATE AVAILABLE    CONFIGURATION VALUES
+netapp_trident-operator    v25.6.0-eksbuild.1    ACTIVE    0       {"cloudIdentity":"'eks.amazonaws.com/role-arn: arn:aws:iam::139763910815:role/AmazonEKS_FSXN_CSI_DriverRole'"}
+----
+* 将加载项更新到上一步输出中的 UPDATE AVAILABLE 下返回的版本。
++
+[source, console]
+----
+eksctl update addon --name netapp_trident-operator --version v25.6.0-eksbuild.1 --cluster my-cluster --force
+----
+
+
+如果您删除该  `--force` 选项，并且任何 Amazon EKS 加载项设置与现有设置冲突，则更新 Amazon EKS 加载项失败；您会收到一条错误消息，以帮助您解决冲突。在指定此选项之前，请确保 Amazon EKS 加载项不管理您需要管理的设置，因为这些设置会被此选项覆盖。有关此设置的其他选项的详细信息，请参见 link:https://eksctl.io/usage/addons/["插件"]。有关 Amazon EKS Kubernetes 字段管理的详细信息，请参见 link:https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-field-management.html["Kubernetes 字段管理"]。
+
+--
+====
+
+
+[[uninstallremove-the-trident-eks-add-on]]
+=== 卸载/删除 Trident EKS 插件
+
+您有两种删除 Amazon EKS 加载项的选项：
+
+* *保留集群上的附加软件* – 此选项可删除任何设置的 Amazon EKS 管理。它还删除了 Amazon EKS 通知您更新并在您启动更新后自动更新 Amazon EKS 加载项的功能。但是，它会保留集群上的加载项软件。此选项使加载项成为自我管理的安装，而不是 Amazon EKS 加载项。使用此选项，附加组件不会停机。保留命令中的  `--preserve` 选项以保留加载项。
+* *从集群中完全移除附加软件* – NetApp 建议仅当您的集群上没有依赖该附加组件的资源时，才从集群中移除 Amazon EKS 附加组件。从 `--preserve`命令中移除 `delete`选项以移除该附加组件。
+
+
+
+NOTE: 如果附加组件具有关联的 IAM 帐户，则不会删除该 IAM 帐户。
+
+[role="tabbed-block"]
+====
+.管理控制台
+--
+. 在  https://console.aws.amazon.com/eks/home#/clusters[] 打开 Amazon EKS 控制台。
+. 在左侧导航窗格中，选择 *Clusters*。
+. 选择要删除其 NetApp Trident CSI 加载项的群集的名称。
+. 选择 *Add-ons* 选项卡，然后选择 *Trident by NetApp*。
+. 选择 *Remove*。
+. 在 *删除 netapp_trident-operator 确认* 对话框中，执行以下操作：
++
+.. 如果希望 Amazon EKS 停止管理加载项的设置，请选择 *Preserve on cluster*。如果要将加载项软件保留在集群上，以便可以自行管理加载项的所有设置，请执行此操作。
+.. 输入 *netapp_trident-operator*。
+.. 选择 *Remove*。
+
+
+
+
+--
+.AWS CLI
+--
+将  `my-cluster` 替换为群集的名称，然后运行以下命令。
+
+[source, console]
+----
+aws eks delete-addon --cluster-name my-cluster --addon-name netapp_trident-operator --preserve
+----
+--
+.eksctl
+--
+以下命令卸载 Trident EKS 加载项：
+
+[source, console]
+----
+eksctl delete addon --cluster K8s-arm --name netapp_trident-operator
+----
+--
+====

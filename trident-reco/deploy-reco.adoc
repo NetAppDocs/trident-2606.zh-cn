@@ -1,0 +1,33 @@
+---
+sidebar: sidebar 
+permalink: trident-reco/deploy-reco.html 
+keywords: deployment, deploy, trident, namespace 
+summary: 部署 Trident 时，请使用此处列出的建议。 
+---
+= Trident 部署建议
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+部署 Trident 时，请使用此处列出的建议。
+
+
+
+[[deploy-to-a-dedicated-namespace]]
+== 部署到专用命名空间
+
+https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/["命名空间"^] 提供不同应用程序之间的管理隔离，并且是资源共享的障碍。例如，来自一个命名空间的 PVC 不能从另一个命名空间使用。Trident 为 Kubernetes 集群中的所有命名空间提供 PV 资源，从而利用具有提升权限的服务帐户。
+
+此外，访问 Trident pod 可能会使用户能够访问存储系统凭据和其他敏感信息。确保应用程序用户和管理应用程序无法访问 Trident 对象定义或 pod 本身非常重要。
+
+
+
+[[use-quotas-and-range-limits-to-control-storage-consumption]]
+== 使用配额和范围限制来控制存储消耗
+
+Kubernetes 有两个特性，当它们结合在一起时，提供了一个强大的机制来限制应用程序的资源消耗。 https://kubernetes.io/docs/concepts/policy/resource-quotas/#storage-resource-quota["存储配额机制"^]使管理员能够在每个命名空间的基础上实现全局和存储类特定的容量和对象计数消耗限制。此外，使用 https://kubernetes.io/docs/tasks/administer-cluster/limit-storage-consumption/#limitrange-to-limit-requests-for-storage["范围限制"^]确保在将请求转发给供应者之前，PVC 请求处于最小值和最大值之间。
+
+这些值是在每个命名空间的基础上定义的，这意味着每个命名空间都应该定义符合其资源要求的值。有关 https://netapp.io/2017/06/09/self-provisioning-storage-kubernetes-without-worry["如何利用配额"^]的信息，请参阅此处。

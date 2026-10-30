@@ -1,0 +1,393 @@
+---
+sidebar: sidebar 
+permalink: trident-install/kubernetes-deploy-helm.html 
+keywords: deploy, Trident, operator, helm, helm chart, configuration, values, standard, registry 
+summary: 您可以使用 Helm 部署 Trident 操作员并安装 Trident。此过程适用于 Trident 所需的容器映像未存储在私有注册表中的安装。 
+---
+= 使用 Helm 部署 Trident 操作员（标准模式）
+:hardbreaks:
+:allow-uri-read: 
+:icons: font
+:imagesdir: ../media/
+
+
+[role="lead"]
+您可以使用 Helm 部署 Trident 操作员并安装 Trident。此过程适用于 Trident 所需的容器映像未存储在私有注册表中的安装。如果确实有专用映像注册表，请使用 link:kubernetes-deploy-helm-mirror.html["脱机部署流程"]。
+
+
+
+[[critical-information-about-trident-26-06]]
+== 有关 Trident 26.06 的关键信息
+
+*您必须阅读以下有关 Trident 的重要信息。*
+
+.<strong>有关 Trident 的重要信息</strong>
+[%collapsible%open]
+====
+[]
+=====
+* Trident 现在支持 Kubernetes 1.37。在升级 Kubernetes 之前，请先升级 Trident。
+* Trident 严格执行在 SAN 环境中使用多路径配置，在 multipath.conf 文件中的建议值为 `find_multipaths: no`。
++
+使用非多路径配置或在 multipath.conf 文件中使用 `find_multipaths: yes`或 `find_multipaths: smart`值将导致挂载失败。自 21.07 版本发布以来，Trident 建议使用 `find_multipaths: no`。
+
+
+
+=====
+====
+
+
+[[deploy-the-trident-operator-and-install-trident-using-helm]]
+== 部署 Trident 操作员并使用 Helm 安装 Trident
+
+使用 Trident link:https://artifacthub.io/packages/helm/netapp-trident/trident-operator["Helm Chart"^] 您可以部署 Trident 操作员并一步安装 Trident。
+
+请检查 link:kubernetes-deploy.html["安装概述"] 以确保您已满足安装先决条件，并为您的环境选择了正确的安装选项。
+
+.开始之前
+除了 link:kubernetes-deploy.html#before-you-begin["部署先决条件"] 之外，您还需要 link:https://v3.helm.sh/["Helm 版本 3"^]。
+
+.步骤
+. 添加 Trident Helm 存储库：
++
+[listing]
+----
+helm repo add netapp-trident https://netapp.github.io/trident-helm-chart
+----
+. 使用 `helm install`并指定部署的名称，如下例所示，其中 `100.2606.0`是您要安装的 Trident 版本。
++
+[listing]
+----
+helm install <name> netapp-trident/trident-operator --version 100.2606.0 --create-namespace --namespace <trident-namespace>
+----
++
+
+NOTE: 如果您已经为 Trident 创建了命名空间，则  `--create-namespace` 参数不会创建其他命名空间。
+
+
+
+您可以使用 `helm list`查看安装详细信息，例如名称、命名空间、图表、状态、应用版本和修订版号。
+
+
+
+[[pass-configuration-data-during-install]]
+== 在安装过程中传递配置数据
+
+在安装过程中，有两种传递配置数据的方法：
+
+[cols="2"]
+|===
+| 选项 | 说明 
+
+
+| `--values` (或  `-f`)  a| 
+指定具有重写的 YAML 文件。这可以指定多次，最右边的文件将优先。
+
+
+
+| `--set`  a| 
+在命令行上指定重写。
+
+|===
+例如，要更改 `debug`的默认值，请运行以下命令，其中 `100.2606.0`是您要安装的 Trident 版本：
+
+[listing]
+----
+helm install <name> netapp-trident/trident-operator --version 100.2606.0  --create-namespace --namespace trident --set tridentDebug=true
+----
+
+
+[[configuration-options]]
+== 配置选项
+
+此表和作为 Helm 图表一部分的 `values.yaml`文件提供了键及其默认值的列表。
+
+[cols="1,2,3"]
+|===
+| 选项 | 说明 | 默认 
+
+
+| `nodeSelector` | Pod 分配的节点标签 |  
+
+
+| `podAnnotations` | Pod 注释 |  
+
+
+| `deploymentAnnotations` | 部署注释 |  
+
+
+| `tolerations` | Pod 分配的容忍度 |  
+
+
+| `affinity` | Pod 分配的亲和力  a| 
+[listing]
+----
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/arch
+              operator: In
+              values:
+              - arm64
+              - amd64
+            - key: kubernetes.io/os
+              operator: In
+              values:
+              - linux
+----
+
+WARNING: 请勿从 values.yaml 文件中删除默认关联。如果要提供自定义关联，请扩展默认关联。
+
+
+
+| `tridentControllerPluginNodeSelector` | Pod 的其他节点选择器。有关详细信息，请参阅 <<了解控制器 pod 和节点 pod>>。 |  
+
+
+| `tridentControllerPluginTolerations` | 覆盖 Kubernetes 对 pod 的容忍。有关详细信息，请参阅 <<了解控制器 pod 和节点 pod>>。 |  
+
+
+| `tridentNodePluginNodeSelector` | Pod 的其他节点选择器。有关详细信息，请参阅 <<了解控制器 pod 和节点 pod>>。 |  
+
+
+| `tridentNodePluginTolerations` | 覆盖 Kubernetes 对 pod 的容忍。有关详细信息，请参阅 <<了解控制器 pod 和节点 pod>>。 |  
+
+
+| `imageRegistry` | 标识  `trident-operator`、 `trident` 和其他图像的注册表。留空以接受默认值。重要提示：在专用存储库中安装 Trident 时，如果您使用  `imageRegistry` 开关来指定存储库位置，请不要在存储库路径中使用  `/netapp/`。 | `""` 
+
+
+| `imagePullPolicy` | 为  `trident-operator` 设置镜像拉取策略。 | `IfNotPresent` 
+
+
+| `imagePullSecrets` | 为  `trident-operator`、 `trident` 和其他镜像设置镜像拉取密钥。 |  
+
+
+| `kubeletDir` | 允许覆盖 kubelet 内部状态的主机位置。 | `"/var/lib/kubelet"` 
+
+
+| `operatorLogLevel` | 允许将 Trident 操作员的日志级别设置为： `trace`、 `debug`、 `info`、 `warn`、 `error`、或  `fatal`。 | `"info"` 
+
+
+| `operatorDebug` | 允许将 Trident 操作员的日志级别设置为调试。 | `true` 
+
+
+| `operatorImage` | 允许完全覆盖  `trident-operator` 的图像。 | `""` 
+
+
+| `operatorImageTag` | 允许覆盖  `trident-operator` 图像的标记。 | `""` 
+
+
+| `tridentIPv6` | 允许启用 Trident 在 IPv6 集群中工作。 | `false` 
+
+
+| `tridentK8sTimeout` | 覆盖大多数 Kubernetes API 操作的默认 30 秒超时（如果非零，以秒为单位）。 | `0` 
+
+
+| `tridentHttpRequestTimeout` | 覆盖 HTTP 请求的默认 90 秒超时， `0s` 为超时的无限持续时间。不允许使用负值。 | `"90s"` 
+
+
+| `tridentSilenceAutosupport` | 允许禁用 Trident 定期 AutoSupport 报告。 | `false` 
+
+
+| `tridentAutosupportImageTag` | 允许覆盖 Trident AutoSupport 容器的图像标记。 | `<version>` 
+
+
+| `tridentAutosupportProxy` | 使 Trident AutoSupport 容器能够通过 HTTP 代理拨打回家电话。 | `""` 
+
+
+| `tridentLogFormat` | 设置 Trident 日志记录格式 (`text` 或 `json`)。 | `"text"` 
+
+
+| `tridentDisableAuditLog` | 禁用 Trident 审计记录器。 | `true` 
+
+
+| `tridentLogLevel` | 允许将 Trident 的日志级别设置为： `trace`、 `debug`、 `info`、 `warn`、 `error` 或  `fatal`。 | `"info"` 
+
+
+| `tridentDebug` | 允许将 Trident 的日志级别设置为 `debug`。您可以通过与节点健康检查 (NHC) 运算符集成来自动执行强制分离过程。有关信息，请参见 link:../trident-reco/force-detach.html["使用 Trident 自动化有状态应用程序的故障转移"]。 | `false` 
+
+
+| `tridentLogWorkflows` | 允许为跟踪日志记录或日志抑制启用特定 Trident 工作流。 | `""` 
+
+
+| `tridentLogLayers` | 允许启用特定 Trident 图层以进行跟踪日志记录或日志抑制。 | `""` 
+
+
+| `tridentImage` | 允许完全覆盖 Trident 的镜像。 | `""` 
+
+
+| `tridentImageTag` | 允许覆盖 Trident 镜像的标签。 | `""` 
+
+
+| `tridentProbePort` | 允许覆盖用于 Kubernetes 活动/就绪探测的默认端口。 | `""` 
+
+
+| `windows` | 允许在 Windows worker 节点上安装 Trident。 | `false` 
+
+
+| `enableForceDetach` | 允许启用强制分离功能。 | `false` 
+
+
+| `excludePodSecurityPolicy` | 从创建中排除操作员 Pod 安全策略。 | `false` 
+
+
+| `cloudProvider` | 在 AKS 集群上使用托管标识或云标识时设置为 `"Azure"`。在 EKS 集群上使用云标识时设置为"AWS"。 | `""` 
+
+
+| `cloudIdentity` | 在 AKS 集群上使用云标识时，设置为工作负载标识（"azure.workload.identity/client-id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxx"）。在 EKS 集群上使用云标识时，设置为 AWS IAM 角色（"'eks.amazonaws.com/role-arn: arn:aws:iam::123456:role/trident-role'"）。 | `""` 
+
+
+| `iscsiSelfHealingInterval` | 调用 iSCSI 自我修复的时间间隔。 | `5m0s` 
+
+
+| `iscsiSelfHealingWaitTime` | iSCSI 自我修复尝试通过执行注销和后续登录来解决过时会话的持续时间。 | `7m0s` 
+
+
+| `nodePrep` | 使 Trident 能够准备 Kubernetes 集群的节点，以使用指定的数据存储协议管理卷。*目前， `iscsi` 是唯一受支持的值。*注意：从 OpenShift 4.19 开始，此功能支持的最低 Trident 版本为 25.06.1。 |  
+
+
+| `enableConcurrency`  a| 
+启用并发 Trident 控制器操作，以提高吞吐量。有关支持的驱动程序的更多信息，请参见链接：https://docs.netapp.com/us-en/trident/trident-use/controller-scalability.html#controller-scalability[Controller Scalability documentation]。
+| false 
+
+
+| `k8sAPIQPS`  a| 
+控制器在与 Kubernetes API 服务器通信时使用的每秒查询数 (QPS) 限制。Burst 值根据 QPS 值自动设置。
+| `100`；可选 
+
+
+| `resources`  a| 
+为 Trident 控制器、节点和操作员 pod 设置 Kubernetes 资源限制和请求。您可以为每个容器和 sidecar 配置 CPU 和内存，以管理 Kubernetes 中的资源分配。
+
+有关配置资源请求和限制的详细信息，请参阅 link:https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/["Pod 和容器的资源管理"^]。
+
+[WARNING]
+====
+* 请勿更改任何容器或字段的名称。
+* 请勿更改缩进 - YAML 缩进对于正确解析至关重要。
+
+
+====
+[NOTE]
+====
+* 默认情况下不会应用任何限制 - 只有请求具有默认值，如果未指定，则会自动应用。
+* 容器名称按 Pod 规格中显示的方式列出。
+* Sidecar 列在每个主容器下。
+* 检查 TORC 的 `status.CurrentInstallationParams`字段以查看当前应用的值。
+
+
+==== a| 
+[source, yaml]
+----
+resources:
+  controller:
+    trident-main:
+      requests:
+        cpu: 10m
+        memory: 80Mi
+      limits:
+          cpu:
+          memory:
+    csi-provisioner:
+      requests:
+        cpu: 2m
+        memory: 20Mi
+      limits:
+        cpu:
+        memory:
+    csi-attacher:
+      requests:
+        cpu: 2m
+        memory: 20Mi
+      limits:
+        cpu:
+        memory:
+    csi-resizer:
+      requests:
+        cpu: 3m
+        memory: 20Mi
+      limits:
+        cpu:
+        memory:
+    csi-snapshotter:
+      requests:
+        cpu: 2m
+        memory: 20Mi
+      limits:
+        cpu:
+        memory:
+    trident-autosupport:
+      requests:
+        cpu: 1m
+        memory: 30Mi
+      limits:
+        cpu:
+        memory:
+  node:
+    linux:
+      trident-main:
+        requests:
+          cpu: 10m
+          memory: 60Mi
+        limits:
+          cpu:
+          memory:
+      node-driver-registrar:
+        requests:
+          cpu: 1m
+          memory: 10Mi
+        limits:
+          cpu:
+          memory:
+    windows:
+      trident-main:
+        requests:
+          cpu: 6m
+          memory: 40Mi
+        limits:
+          cpu:
+          memory:
+      node-driver-registrar:
+        requests:
+          cpu: 6m
+          memory: 40Mi
+        limits:
+          cpu:
+          memory:
+      liveness-probe:
+        requests:
+          cpu: 2m
+          memory: 40Mi
+        limits:
+          cpu:
+          memory:
+  operator:
+    requests:
+      cpu: 10m
+      memory: 40Mi
+    limits:
+      cpu:
+      memory:
+----
+
+
+| `httpsMetrics` | 为 Prometheus 指标端点启用 HTTPS。 | false 
+
+
+| `hostNetwork`  a| 
+为 Trident 控制器启用主机网络。如果要在多主机网络中分离前端和后端流量，则此功能非常有用。
+| false 
+|===
+
+
+[[understanding-controller-pods-and-node-pods]]
+=== 了解控制器 pod 和节点 pod
+
+Trident 作为单个控制器 pod 运行，并在集群中的每个工作节点上加上一个节点 pod。节点 pod 必须运行在任何可能要装载 Trident 卷的主机上。
+
+Kubernetes link:https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/["节点选择器"^] 和 link:https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/["容忍和污点"^] 用于限制 pod 在特定或首选节点上运行。使用 `ControllerPlugin` 和  `NodePlugin`，您可以指定约束和覆盖。
+
+* 控制器插件处理卷配置和管理，例如快照和调整大小。
+* 节点插件处理将存储附加到节点。
+
